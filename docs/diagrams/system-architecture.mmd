@@ -1,0 +1,67 @@
+graph TD
+    %% Pages
+    subgraph Pages
+        HomePage[Home Page]
+        DashboardPage[Dashboard Page]
+        ProfilePage[Profile Page]
+    end
+
+    %% Components
+    subgraph Components
+        NavComponent[Navigation Component]
+        HeaderComponent[Header Component]
+        FooterComponent[Footer Component]
+        UserProfileComponent[User Profile Component]
+        DataTableComponent[Data Table Component]
+    end
+
+    %% Routes
+    subgraph Routes
+        HomeRoute["&#47;"]
+        DashboardRoute["&#47;dashboard"]
+        ProfileRoute["&#47;profile&#47;:id"]
+        APIRoute["&#47;api&#47;*"]
+    end
+
+    %% Database Tables
+    subgraph Database
+        UsersTable["Users Table<br>- id: uuid<br>- username: varchar<br>- email: varchar<br>- created_at: timestamp"]
+        ProfilesTable["Profiles Table<br>- user_id: uuid<br>- full_name: varchar<br>- bio: text<br>- avatar: varchar"]
+        SettingsTable["Settings Table<br>- user_id: uuid<br>- preferences: jsonb<br>- theme: varchar"]
+    end
+
+    %% Relationships
+    HomePage --> HomeRoute
+    DashboardPage --> DashboardRoute
+    ProfilePage --> ProfileRoute
+
+    HomeRoute --> UsersTable
+    DashboardRoute --> UsersTable
+    ProfileRoute --> ProfilesTable
+    ProfileRoute --> UsersTable
+
+    UserProfileComponent --> ProfilesTable
+    DataTableComponent --> UsersTable
+
+    %% Component Usage
+    HomePage --> NavComponent
+    HomePage --> HeaderComponent
+    HomePage --> FooterComponent
+    DashboardPage --> NavComponent
+    DashboardPage --> DataTableComponent
+    ProfilePage --> UserProfileComponent
+
+    %% Database Relations
+    UsersTable --> ProfilesTable
+    UsersTable --> SettingsTable
+
+    %% Styling
+    classDef page fill:#f9f,stroke:#333,stroke-width:2px
+    classDef component fill:#bbf,stroke:#333,stroke-width:2px
+    classDef route fill:#bfb,stroke:#333,stroke-width:2px
+    classDef database fill:#fbb,stroke:#333,stroke-width:2px
+
+    class HomePage,DashboardPage,ProfilePage page;
+    class NavComponent,HeaderComponent,FooterComponent,UserProfileComponent,DataTableComponent component;
+    class HomeRoute,DashboardRoute,ProfileRoute,APIRoute route;
+    class UsersTable,ProfilesTable,SettingsTable database; 

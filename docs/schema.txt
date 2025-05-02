@@ -1,0 +1,204 @@
+CREATE TABLE IF NOT EXISTS "prices" (
+	"symbol"	TEXT UNIQUE,
+	"asset_class"	TEXT,
+	"price"	REAL CHECK("price" > 0),
+	"lastupdate"	INTEGER,
+	"alloc_target"	REAL,
+	"compidx"	REAL,
+	"compidx2"	REAL,
+	"stdev"	REAL,
+	"laststatupdate"	INTEGER,
+	"volat"	REAL,
+	"class"	TEXT,
+	"hlr"	REAL,
+	"mean50"	REAL,
+	"mean200"	REAL,
+	"divyield"	REAL
+, "vol90"	REAL);
+CREATE TABLE IF NOT EXISTS "security_values" (
+	"symbol"	TEXT,
+	"timestamp"	TEXT,
+	"high"	TEXT,
+	"close"	TEXT,
+	"volume"	TEXT,
+	"shares"	REAL,
+	"cost_basis"	REAL,
+	"return"	REAL,
+	"cum_divs"	REAL,
+	"cbps"	REAL,
+	"cum_real_gl"	REAL
+);
+CREATE TABLE IF NOT EXISTS "aux_attributes" (
+	"symbol"	TEXT UNIQUE,
+	"sector"	TEXT,
+	"industry"	TEXT,
+	"market_cap_cat"	TEXT,
+	"market_cap"	REAL,
+	"dividend_date"	TEXT
+, "expected_amount"	REAL);
+CREATE TABLE IF NOT EXISTS "asset_classes" (
+	"symbol"	TEXT,
+	"class"	TEXT
+);
+CREATE TABLE IF NOT EXISTS "sectors" (
+	"symbol"	TEXT,
+	"sector"	TEXT
+, "average_pe"	REAL);
+CREATE TABLE dividends
+    (symbol TEXT NOT NULL, declare_date TEXT NOT NULL, amount REAL, PRIMARY KEY (symbol, declare_date));
+CREATE TABLE IF NOT EXISTS "xagtmp" (
+	"field1"	TEXT,
+	"field2"	TEXT
+);
+CREATE TABLE IF NOT EXISTS "weights" (
+	"timestamp"	TEXT,
+	"symbol"	TEXT,
+	"weight"	INTEGER
+);
+CREATE TABLE IF NOT EXISTS "returns" (
+	"symbol"	TEXT,
+	"returnpct"	REAL
+);
+CREATE TABLE IF NOT EXISTS "NET_CASH_FROM_OPS" (
+	"symbol"	TEXT,
+	"start"	TEXT,
+	"end"	TEXT,
+	"raw"	INTEGER,
+	"act"	INTEGER
+);
+CREATE TABLE IF NOT EXISTS "transactions" (
+	"id"	INTEGER UNIQUE,
+	"date_new"	TEXT,
+	"symbol"	TEXT,
+	"xtype"	TEXT,
+	"acct"	TEXT,
+	"price"	REAL,
+	"units"	REAL,
+	"units_remaining"	REAL,
+	"gain"	REAL,
+	"lotgain"	REAL,
+	"term"	TEXT,
+	"disposition"	TEXT,
+	"datetime"	TEXT,
+	"fee"	REAL,
+	"note"	TEXT,
+	"tradetype"	TEXT,
+	PRIMARY KEY("id" AUTOINCREMENT)
+);
+CREATE TABLE sqlite_sequence(name,seq);
+CREATE TABLE IF NOT EXISTS "MPT" (
+	"symbol"	TEXT,
+	"target_alloc"	REAL,
+	"sectorshort"	TEXT,
+	"sector"	TEXT,
+	"industry"	TEXT,
+	"market_cap"	TEXT,
+	"pe"	REAL,
+	"range"	REAL,
+	"flag"	TEXT,
+	"avgflag"	TEXT,
+	"divyield"	REAL,
+	"beta"	REAL,
+	"recm"	TEXT,
+	"overamt"	REAL,
+	"target_price"	REAL,
+	"div_growth_rate"	REAL,
+	"market_cap_val"	DECIMAL(15, 2),
+	"RSI"	REAL
+, "fcf_ni_ratio"	REAL);
+CREATE TABLE portfolio_data (
+  gammainput REAL,
+  rgoal REAL,
+  lower_bound REAL,
+  upper_bound REAL,
+  hash_value TEXT UNIQUE,  -- Assuming hash is used for uniqueness
+  expected_return REAL,
+  volatility REAL,
+  sharpe_ratio REAL
+);
+CREATE TABLE IF NOT EXISTS "historical" (
+	"flag"	TEXT,
+	"date"	TEXT,
+	"value"	REAL,
+	"cost"	NUMERIC,
+	"dret"	REAL,
+	"return"	REAL,
+	"WMA8"	REAL,
+	"WMA24"	REAL,
+	"WMA28"	REAL,
+	"WMA36"	REAL,
+	"WMA41"	REAL,
+	"WMA48"	REAL,
+	"WMA64"	REAL,
+	"WMA72"	REAL,
+	"WMA88"	REAL,
+	"WMA110"	REAL,
+	"WMA135"	REAL,
+	"WMA160"	REAL,
+	"YMA1"	REAL,
+	"YMA2"	REAL,
+	"YMA3"	REAL,
+	"YMA4"	REAL
+);
+CREATE TABLE IF NOT EXISTS "MPT2" (
+	"symbol"	TEXT,
+	"target_alloc"	REAL,
+	"sectorshort"	TEXT,
+	"sector"	TEXT,
+	"industry"	TEXT,
+	"market_cap"	TEXT,
+	"pe"	REAL,
+	"range"	REAL,
+	"flag"	TEXT,
+	"avgflag"	TEXT,
+	"divyield"	REAL,
+	"beta"	REAL,
+	"recm"	TEXT,
+	"overamt"	REAL,
+	"target_price"	REAL,
+	"div_growth_rate"	REAL,
+	"market_cap_val"	DECIMAL(15, 2),
+	"RSI"	REAL
+, "fcf_ni_ratio"	REAL);
+CREATE TABLE IF NOT EXISTS "transactions_ark" (
+	"id"	INTEGER UNIQUE,
+	"date_new"	TEXT,
+	"symbol"	TEXT,
+	"xtype"	TEXT,
+	"acct"	TEXT,
+	"price"	REAL,
+	"units"	REAL,
+	"units_remaining"	REAL,
+	"gain"	REAL,
+	"lotgain"	REAL,
+	"term"	TEXT,
+	"disposition"	TEXT,
+	"datetime"	TEXT,
+	"fee"	REAL,
+	"note"	TEXT,
+	"tradetype"	TEXT,
+	PRIMARY KEY("id" )
+);
+CREATE TABLE portfolio (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    name TEXT NOT NULL,
+    shares INTEGER NOT NULL,
+    price REAL NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+CREATE INDEX wgt_idx on weights(symbol);
+CREATE INDEX "sv_sym_idx" ON "security_values" (
+	"symbol"
+);
+CREATE INDEX "trx_idx" ON "transactions" (
+	"symbol"
+);
+CREATE INDEX "sym_idx" ON "MPT" (
+	"symbol"
+);
+CREATE VIEW "open_lots" AS select id,acct,symbol,date_new,units,units_remaining,price,term,note from transactions
+where xtype = 'Buy'
+and disposition IS NULL
+and symbol NOT IN ('SNP','XAG')
+/* open_lots(id,acct,symbol,date_new,units,units_remaining,price,term,note) */;

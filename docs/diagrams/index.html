@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Manager Architecture</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script src="https://unpkg.com/panzoom@9.4.0/dist/panzoom.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #diagram-container {
+            overflow: hidden;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 20px 0;
+            background-color: white;
+            min-height: 600px;
+        }
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Portfolio Manager Architecture</h1>
+        <div class="controls">
+            <button onclick="zoomIn()">Zoom In</button>
+            <button onclick="zoomOut()">Zoom Out</button>
+            <button onclick="resetZoom()">Reset Zoom</button>
+        </div>
+        <div id="diagram-container">
+            <pre class="mermaid">
+graph TD
+    %% Frontend Components
+    subgraph Frontend[Frontend - React/TypeScript]
+        App[App.tsx]
+        Navbar[Navbar]
+        
+        %% Pages
+        subgraph Pages[Pages]
+            Holdings[Holdings Page]
+            Transactions[Transactions Page]
+            PortfolioPerf[Portfolio Performance Page]
+            PositionInfo[Position Info Page]
+            Modelling[Modelling Page]
+            SchedulerSettings[Scheduler Settings Page]
+        end
+        
+        %% Components
+        subgraph Components[Components]
+            PortfolioChart[Portfolio Performance Chart]
+            PriceHistory[Price History Chart]
+            SectorAlloc[Sector Allocation Chart]
+            Returns[Returns Chart]
+            TransactionForm[Transaction Form]
+            EditTransaction[Edit Transaction Modal]
+            PositionDetails[Position Details]
+        end
+    end
+
+    %% Backend Components
+    subgraph Backend[Backend - Python/FastAPI]
+        MainApp[main.py]
+        
+        subgraph API[API Endpoints]
+            PortfolioRoutes[Portfolio Routes]
+            TransactionRoutes[Transaction Routes]
+            PriceRoutes[Price Routes]
+            SchedulerRoutes[Scheduler Routes]
+            PositionRoutes[Position Routes]
+        end
+        
+        subgraph Services[Core Services]
+            Scheduler[Scheduler Service]
+            YFinance[YFinance Service]
+            PriceUpdater[Price Updater]
+            PortfolioCalc[Portfolio Calculator]
+        end
+    end
+
+    %% Database Tables
+    subgraph Database[SQLite Database]
+        Prices[["prices<br>- symbol<br>- price<br>- asset_class<br>- lastupdate"]]
+        Portfolio[["portfolio<br>- symbol<br>- name<br>- shares<br>- price"]]
+        Transactions[["transactions<br>- date<br>- symbol<br>- type<br>- price<br>- units"]]
+        MPT[["MPT<br>- symbol<br>- target_alloc<br>- sector<br>- market_cap"]]
+        Historical[["historical<br>- date<br>- value<br>- return<br>- WMA metrics"]]
+    end
+
+    %% Frontend Relationships
+    App --> Navbar
+    App --> Pages
+    App --> Components
+    
+    %% Component Usage
+    Holdings --> PortfolioChart
+    Holdings --> SectorAlloc
+    PortfolioPerf --> Returns
+    PositionInfo --> PriceHistory
+    PositionInfo --> PositionDetails
+    Transactions --> TransactionForm
+    Transactions --> EditTransaction
+
+    %% Backend Relationships
+    MainApp --> API
+    MainApp --> Services
+    Scheduler --> YFinance
+    YFinance --> PriceUpdater
+    PriceUpdater --> PortfolioCalc
+
+    %% API to Service Relationships
+    PortfolioRoutes --> Portfolio
+    TransactionRoutes --> Transactions
+    PriceRoutes --> Prices
+    PositionRoutes --> MPT
+    PortfolioCalc --> Historical
+
+    %% Frontend to Backend Communication
+    Holdings --> PortfolioRoutes
+    Transactions --> TransactionRoutes
+    PortfolioPerf --> PriceRoutes
+    PositionInfo --> PositionRoutes
+    SchedulerSettings --> SchedulerRoutes
+
+    %% Styling
+    classDef frontend fill:#bbf,stroke:#333,stroke-width:2px
+    classDef backend fill:#bfb,stroke:#333,stroke-width:2px
+    classDef database fill:#fbb,stroke:#333,stroke-width:2px
+    classDef service fill:#fbf,stroke:#333,stroke-width:2px
+
+    class App,Navbar,Holdings,Transactions,PortfolioPerf,PositionInfo,Modelling,SchedulerSettings,PortfolioChart,PriceHistory,SectorAlloc,Returns,TransactionForm,EditTransaction,PositionDetails frontend
+    class MainApp,PortfolioRoutes,TransactionRoutes,PriceRoutes,SchedulerRoutes,PositionRoutes backend
+    class Scheduler,YFinance,PriceUpdater,PortfolioCalc service
+    class Prices,Portfolio,Transactions,MPT,Historical database
+            </pre>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose'
+        });
+
+        // Initialize panzoom after Mermaid renders
+        setTimeout(() => {
+            const element = document.querySelector('#diagram-container');
+            window.panzoomInstance = panzoom(element, {
+                maxZoom: 5,
+                minZoom: 0.1,
+                bounds: true,
+                boundsPadding: 0.1
+            });
+        }, 1000);
+
+        // Zoom controls
+        function zoomIn() {
+            window.panzoomInstance.zoomIn();
+        }
+
+        function zoomOut() {
+            window.panzoomInstance.zoomOut();
+        }
+
+        function resetZoom() {
+            window.panzoomInstance.reset();
+        }
+    </script>
+</body>
+</html> 
