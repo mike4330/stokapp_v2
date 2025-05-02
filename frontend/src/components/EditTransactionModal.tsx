@@ -28,6 +28,7 @@ interface Transaction {
   acct: string;
   gain?: number | null;
   disposition?: string | null;
+  units_remaining?: number | null;
 }
 
 // Props interface for the EditTransactionModal component
@@ -65,7 +66,8 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     type: '',
     units: '',
     price: '',
-    gain: ''
+    gain: '',
+    units_remaining: ''
   });
   
   // Error handling state
@@ -85,7 +87,8 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         type: transaction.xtype,
         units: transaction.units.toString(),
         price: transaction.price.toString(),
-        gain: transaction.gain?.toString() || ''
+        gain: transaction.gain?.toString() || '',
+        units_remaining: transaction.units_remaining?.toString() || ''
       });
     }
   }, [transaction]);
@@ -138,7 +141,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     
     try {
       // Prepare transaction data for API
-      const updatedTransaction = {
+      const updatedTransaction: any = {
         date: formData.date,
         account: formData.account,
         symbol: formData.symbol,
@@ -147,7 +150,10 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         price: parseFloat(formData.price),
         gain: formData.type === 'Sell' && formData.gain ? parseFloat(formData.gain) : 0
       };
-      
+      // Only include units_remaining if it's a valid number
+      if (formData.units_remaining !== '' && !isNaN(Number(formData.units_remaining))) {
+        updatedTransaction.units_remaining = parseFloat(formData.units_remaining);
+      }
       // Debug logging
       console.log('Original transaction:', transaction);
       console.log('Form data:', formData);
@@ -354,6 +360,21 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 step="any"
                 className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm py-2 px-3"
                 required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Units Remaining</label>
+              <input
+                type="number"
+                name="units_remaining"
+                value={formData.units_remaining}
+                onChange={handleInputChange}
+                step="any"
+                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm py-2 px-3"
+                placeholder="Enter units remaining"
               />
             </div>
           </div>

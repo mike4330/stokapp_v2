@@ -15,6 +15,13 @@
 
 import React, { useState, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react';
 import axios from 'axios';
+import { useCombobox } from 'downshift';
+
+// Viridis color palette (10 colors, from matplotlib)
+const viridisPalette = [
+  '#440154', '#482878', '#3e4989', '#31688e', '#26828e',
+  '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'
+];
 
 export interface OpenLot {
   id: number;
@@ -41,6 +48,7 @@ export interface LotManagerRef {
 
 interface LotManagerProps {
   onEditLot?: (lot: OpenLot) => void;
+  onCloseLot?: (lot: OpenLot) => void;
 }
 
 const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
@@ -52,6 +60,10 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
   const [termFilter, setTermFilter] = useState<TermFilter>('all');
   const [plFilter, setPlFilter] = useState<number>(-100);
   const [basisFilter, setBasisFilter] = useState<number>(0);
+  const [symbolDrilldown, setSymbolDrilldown] = useState<string | null>(null);
+  const [symbolInput, setSymbolInput] = useState('');
+  const [symbolSuggestions, setSymbolSuggestions] = useState<string[]>([]);
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
 
   // Calculate min and max basis values from the data
   const { minBasis, maxBasis } = useMemo(() => {
@@ -121,7 +133,44 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
     }
   };
 
+  // Symbol autocomplete setup using downshift
+  const {
+    isOpen: isComboboxOpen,
+    getMenuProps,
+    getInputProps,
+    getLabelProps,
+    highlightedIndex,
+    getItemProps,
+  } = useCombobox({
+    items: symbolSuggestions,
+    inputValue: symbolInput,
+    onInputValueChange: async ({ inputValue }) => {
+      setSymbolInput(inputValue || '');
+      if (inputValue) {
+        try {
+          const response = await axios.get<string[]>(`/api/symbols/search?q=${inputValue}`);
+          setSymbolSuggestions(response.data);
+        } catch (error) {
+          setSymbolSuggestions([]);
+        }
+      } else {
+        setSymbolSuggestions([]);
+      }
+    },
+    onSelectedItemChange: ({ selectedItem }) => {
+      if (selectedItem) {
+        setSelectedSymbol(selectedItem);
+        setSymbolInput(selectedItem);
+        setSymbolSuggestions([]);
+      }
+    },
+  });
+
   const filteredLots = lots.filter(lot => {
+    // Symbol drilldown filter
+    if (symbolDrilldown && lot.symbol !== symbolDrilldown) return false;
+    // Symbol typeahead filter
+    if (selectedSymbol && lot.symbol !== selectedSymbol) return false;
     // Term filter
     if (termFilter !== 'all') {
       const purchaseDate = new Date(lot.date_new);
@@ -177,6 +226,40 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
     }
   };
 
+  // Helper to get max pl_pct in filteredLots
+  const maxPLPct = useMemo(() => {
+    const validPL = filteredLots
+      .map(lot => lot.pl_pct)
+      .filter((v): v is number => v !== null && v >= 10);
+    return validPL.length > 0 ? Math.max(...validPL) : 10;
+  }, [filteredLots]);
+
+  // Helper to map pl_pct to palette index
+  function getViridisColor(pl_pct: number | null): string {
+    if (pl_pct === null || pl_pct < 10) return 'transparent';
+    const min = 10;
+    const max = maxPLPct;
+    if (max === min) return viridisPalette[viridisPalette.length - 1];
+    const idx = Math.min(
+      viridisPalette.length - 1,
+      Math.floor(((pl_pct - min) / (max - min)) * (viridisPalette.length - 1))
+    );
+    return viridisPalette[idx];
+  }
+
+  // Helper to determine text color for contrast
+  function getTextColor(bgColor: string): string {
+    if (bgColor === 'transparent') return 'inherit';
+    // Simple luminance check
+    const hex = bgColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    // Perceived luminance formula
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.6 ? '#222' : '#fff';
+  }
+
   // Loading spinner display while fetching data
   if (isLoading) {
     return (
@@ -197,8 +280,24 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
 
   return (
     <div className="container mx-auto px-2 py-4">
+      <h1 className="text-xl font-bold text-gray-800 dark:text-gray-200">Open Lots Manager</h1>
+      {/* Drilldown chip below title */}
+      {symbolDrilldown && (
+        <div className="mt-2 mb-4 flex items-center gap-2">
+          <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-sm font-semibold">
+            Symbol: {symbolDrilldown}
+            <button
+              className="ml-2 text-blue-600 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100 font-bold"
+              onClick={() => setSymbolDrilldown(null)}
+              title="Clear symbol filter"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      )}
+      {/* Sticky filter box below navbar */}
       <div className="flex justify-between items-start mb-4">
-        <h1 className="text-xl font-bold text-gray-800 dark:text-gray-200">Open Lots Manager</h1>
         <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className="flex flex-col gap-2">
@@ -234,6 +333,46 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
                 >
                   Short Term
                 </button>
+              </div>
+              {/* Symbol type-ahead filter */}
+              <div className="mt-3">
+                <label {...getLabelProps()} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Symbol Filter</label>
+                <div className="relative">
+                  <input
+                    {...getInputProps()}
+                    className="block w-full rounded-md bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-white text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Type to search symbol..."
+                  />
+                  {selectedSymbol && (
+                    <button
+                      className="absolute right-2 top-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg font-bold focus:outline-none"
+                      onClick={() => { setSelectedSymbol(null); setSymbolInput(''); setSymbolSuggestions([]); }}
+                      title="Clear symbol filter"
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  )}
+                  <ul {...getMenuProps()} 
+                    className={`absolute z-50 w-full bg-white dark:bg-gray-700 mt-1 rounded-md shadow-lg max-h-60 overflow-auto border border-gray-300 dark:border-gray-600 ${
+                      isComboboxOpen && symbolSuggestions.length > 0 ? 'block' : 'hidden'
+                    }`}
+                  >
+                    {isComboboxOpen &&
+                      symbolSuggestions.map((item, index) => (
+                        <li
+                          key={item}
+                          {...getItemProps({ item, index })}
+                          className={`px-3 py-2 cursor-pointer text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 text-sm ${
+                            highlightedIndex === index ? 'bg-gray-200 dark:bg-gray-600' : ''
+                          }`}
+                        >
+                          {item}
+                        </li>
+                      ))
+                    }
+                  </ul>
+                </div>
               </div>
             </div>
             <div className="flex flex-col gap-4 min-w-[250px]">
@@ -320,39 +459,63 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
             {sortedLots.map((lot) => (
               <tr 
                 key={lot.id}
-                onClick={() => handleEditLot(lot)}
                 className="hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
               >
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{lot.id}</td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs font-medium text-gray-900 dark:text-gray-100">{lot.symbol}</td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{lot.acct}</td>
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                  <button
+                    className="underline text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 cursor-pointer"
+                    title="Close this lot"
+                    onClick={() => props.onCloseLot && props.onCloseLot(lot)}
+                  >
+                    {lot.id}
+                  </button>
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <button
+                    className="text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 cursor-pointer focus:outline-none"
+                    onClick={() => setSymbolDrilldown(lot.symbol)}
+                    title={`Drill down to ${lot.symbol}`}
+                  >
+                    {lot.symbol}
+                  </button>
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{lot.acct}</td>
                 {/* Format date to locale string */}
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
-                  {lot.date_new ? new Date(lot.date_new).toLocaleDateString() : '-'}
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                  {lot.date_new || '-'}
                 </td>
                 {/* Format numerical values with appropriate precision */}
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
-                  {lot.units?.toFixed(2) ?? '-'}
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                  {lot.units !== null && lot.units !== undefined ? lot.units.toFixed(4) : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
-                  {lot.units_remaining?.toFixed(2) ?? '-'}
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                  {lot.units_remaining !== null && lot.units_remaining !== undefined ? lot.units_remaining.toFixed(4) : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {lot.price ? `$${lot.price.toFixed(2)}` : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {lot.lot_basis ? `$${lot.lot_basis.toFixed(2)}` : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {lot.current_value ? `$${lot.current_value.toFixed(2)}` : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {lot.profit_loss ? `$${lot.profit_loss.toFixed(2)}` : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
+                <td
+                  className={`px-2 py-2 whitespace-nowrap text-sm${(lot.pl_pct === null || lot.pl_pct < 10 ? ' text-gray-500 dark:text-gray-300' : '')}`}
+                  style={{
+                    background: getViridisColor(lot.pl_pct),
+                    color: (lot.pl_pct === null || lot.pl_pct < 10)
+                      ? undefined
+                      : getTextColor(getViridisColor(lot.pl_pct)),
+                    transition: 'background 0.2s',
+                  }}
+                >
                   {lot.pl_pct ? `${lot.pl_pct.toFixed(2)}%` : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {lot.term ?? '-'}
                 </td>
               </tr>

@@ -36,9 +36,9 @@ export const PositionDetails: React.FC<PositionDetailsProps> = ({ position }) =>
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-6 border border-gray-600 rounded-lg p-4">
+      <div className="grid grid-cols-2 gap-6 border border-gray-700 rounded-lg p-4">
         {/* Left Column - Labels */}
-        <div className="space-y-2 border-r border-gray-600 pr-4">
+        <div className="space-y-2 border-r border-gray-700 pr-4">
           <div className="text-left text-gray-400">Units:</div>
           <div className="text-left text-gray-400">Current Price:</div>
           <div className="text-left text-gray-400">Position Value:</div>

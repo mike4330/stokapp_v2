@@ -28,6 +28,7 @@ class TransactionCreate(BaseModel):
     type: str
     units: float
     price: float
+    units_remaining: float = None
 
 class TransactionUpdate(TransactionCreate):
     gain: float = None
@@ -606,8 +607,7 @@ def update_transaction(transaction_id: int, transaction: TransactionUpdate, db: 
             logger.warning(f"DISPOSITION CHANGE - Transaction {transaction_id} ({current_symbol}): {current_disposition} -> {new_disposition}")
         
         # Determine if units_remaining should be updated
-        # If type is changing to 'Buy', set units_remaining = units
-        # If type is changing from 'Buy' to something else, set units_remaining = NULL
+        # If units_remaining is provided in the payload, use it. Otherwise, use the legacy logic.
         units_remaining_update = ""
         params = {
             "transaction_id": transaction_id,
@@ -618,15 +618,20 @@ def update_transaction(transaction_id: int, transaction: TransactionUpdate, db: 
             "units": transaction.units,
             "price": transaction.price,
             "gain": transaction.gain if hasattr(transaction, 'gain') and transaction.gain is not None else None,
-            "disposition": transaction.disposition if hasattr(transaction, 'disposition') and transaction.disposition is not None else None
+            "disposition": transaction.disposition if hasattr(transaction, 'disposition') and transaction.disposition is not None else None,
+            "units_remaining": transaction.units_remaining if hasattr(transaction, 'units_remaining') else None
         }
-        
         logger.info(f"Update parameters: {params}")
         
-        if transaction.type == 'Buy':
+        if transaction.units_remaining is not None:
+            units_remaining_update = ", units_remaining = :units_remaining"
+        elif transaction.type == 'Buy':
             units_remaining_update = ", units_remaining = :units"
+            params["units_remaining"] = transaction.units
         elif current_type == 'Buy' and transaction.type != 'Buy':
             units_remaining_update = ", units_remaining = NULL"
+            params["units_remaining"] = None
+        # else: don't update units_remaining
         
         # Update the transaction - Map API field names to DB column names
         update_query = text(f"""

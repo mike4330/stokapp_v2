@@ -46,6 +46,11 @@ interface MPTData {
   sector: string;
 }
 
+const SECTOR_NAME_MAP: Record<string, string> = {
+  'Health Care': 'Healthcare',
+  // Add more mappings here if needed
+};
+
 const COLORS = [
   'rgba(0, 136, 254, 0.7)',    // Blue
   'rgba(0, 196, 159, 0.7)',    // Teal
@@ -64,6 +69,9 @@ const SectorDrillDown: React.FC<DrillDownProps> = ({ sector }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Normalize sector name for lookup
+  const normalizedSector = SECTOR_NAME_MAP[sector] || sector;
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -78,9 +86,9 @@ const SectorDrillDown: React.FC<DrillDownProps> = ({ sector }) => {
           mptResponse.data.map(item => [item.symbol, item.sector])
         );
 
-        // Filter holdings by sector and calculate percentages
+        // Filter holdings by normalized sector and calculate percentages
         const sectorHoldings = holdingsResponse.data.filter(holding => 
-          sectorMap.get(holding.symbol) === sector
+          sectorMap.get(holding.symbol) === normalizedSector
         );
 
         if (sectorHoldings.length === 0) {
@@ -113,7 +121,7 @@ const SectorDrillDown: React.FC<DrillDownProps> = ({ sector }) => {
     };
 
     fetchData();
-  }, [sector]);
+  }, [normalizedSector]);
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -152,7 +160,7 @@ const SectorDrillDown: React.FC<DrillDownProps> = ({ sector }) => {
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
-        No holdings found in {sector} sector
+        No holdings found in {normalizedSector} sector
       </div>
     );
   }

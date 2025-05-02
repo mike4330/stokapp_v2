@@ -1,4 +1,22 @@
-"""Scheduler configuration module."""
+"""
+Scheduler configuration and mechanics.
+
+This module sets up and manages the application's background task scheduler using APScheduler.
+
+Mechanics:
+- The scheduler is configured with a thread pool executor and job defaults (e.g., max instances, misfire grace time).
+- Jobs are registered via the `register_jobs` function (see jobs.py), which is called during initialization.
+- Job states (enabled/paused) are persisted in a JSON file and restored on startup.
+- The scheduler is started automatically when the backend launches.
+
+How to add a new scheduled job:
+1. Implement the task function in the `app/scheduler/tasks/` package.
+2. Import and expose the function in `app/scheduler/tasks/__init__.py` if needed.
+3. In `app/scheduler/jobs.py`, add a new entry to `register_jobs`, using `scheduler.add_job` with the desired trigger and your task function.
+4. Restart the backend to apply changes. The new job will be registered and managed by the scheduler.
+
+See the README for more details and examples.
+"""
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.triggers.cron import CronTrigger

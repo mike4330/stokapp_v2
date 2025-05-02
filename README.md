@@ -11,13 +11,29 @@ A modern web application for managing investment portfolios, tracking transactio
 - Position-level drill-down analysis
 - Dark/light mode support
 - Responsive design
+- Automated background tasks via scheduler
 
 ## Technology Stack
 
 - Frontend: React with TypeScript
 - UI: Tailwind CSS
 - Charts: Recharts
-- API: RESTful backend (separate repository)
+- Backend API: RESTful service (included in this repository)
+- Scheduler: APScheduler (Python)
+
+## Scheduler Functionality
+
+The application includes a background task scheduler (using APScheduler) that automates key portfolio management tasks. Example scheduled jobs:
+
+- **update_overamt**: Runs every 5 minutes during US market hours (9:00 AM - 4:00 PM ET, weekdays only) to update portfolio metrics.
+- **price_updater**: Runs daily at 9:35 AM ET on weekdays to update stock prices.
+
+You can check the scheduler status and view registered jobs by visiting:
+```
+http://localhost:8000/scheduler/status
+```
+
+Scheduler activity is also logged in the backend logs.
 
 ## Getting Started
 
@@ -25,7 +41,7 @@ A modern web application for managing investment portfolios, tracking transactio
 
 - Node.js (v14 or higher)
 - npm or yarn
-- Backend API service running (see separate repository)
+- Python 3.8+ (for backend and scheduler)
 
 ### Installation
 
@@ -35,12 +51,28 @@ A modern web application for managing investment portfolios, tracking transactio
    cd mpmv2
    ```
 
-2. Install dependencies:
+2. Install frontend dependencies:
    ```bash
    npm install
    ```
 
-3. Start the development server:
+3. Install backend dependencies:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   cd ..
+   ```
+
+4. Start the backend API and scheduler:
+   ```bash
+   cd backend
+   python run.py
+   # or
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   cd ..
+   ```
+
+5. Start the frontend development server:
    ```bash
    npm start
    ```
