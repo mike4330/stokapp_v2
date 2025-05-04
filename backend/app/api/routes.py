@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Dict, Any
@@ -20,6 +20,8 @@ from app.db.crud import (
     get_historical_returns_data
 )
 from app.schemas.visualization import SunburstResponse, SunburstData
+from app.mpt_modeling import initiate_mpt_modeling, get_task_status
+from fastapi import BackgroundTasks
 
 class TransactionCreate(BaseModel):
     date: date
@@ -510,10 +512,8 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
     try:
         # For new Buy transactions, units_remaining equals units
         units_remaining = transaction.units if transaction.type == 'Buy' else None
-        
         # Convert date to string in YYYY-MM-DD format
         date_str = transaction.date.isoformat()
-        
         # Execute the insert
         result = db.execute(
             text("""
@@ -563,15 +563,11 @@ def create_transaction(transaction: TransactionCreate, db: Session = Depends(get
                 "datetime": date_str  # Using the same date for datetime field
             }
         )
-        
         # Fetch the ID before committing
         new_id = result.scalar()
-        
         # Commit the transaction
         db.commit()
-        
         return {"id": new_id}
-        
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1208,3 +1204,56 @@ def get_potential_lots(
     except Exception as e:
         logging.error(f"Error in get_potential_lots: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/weights")
+def get_symbol_weights(symbol: str = Query(...), days: int = Query(365), db: Session = Depends(get_db)):
+    """Get historical actual and target weights for a symbol."""
+    # Handle BRKB/BRK.B mapping
+    isym = symbol
+    if isym == "BRKB":
+        isym = "BRK.B"
+    sql = text('''
+        select security_values.timestamp as date,
+               ((close*shares)/value) as weight,
+               (select weight from weights where symbol = :isym and weights.timestamp = security_values.timestamp) as target
+        from security_values, historical
+        where symbol = :isym and target > 0
+          AND security_values.timestamp > date('now', :days_expr)
+          and security_values.timestamp = historical.date
+        order by security_values.timestamp
+    ''')
+    days_expr = f'-{days} days'
+    result = db.execute(sql, {"isym": isym, "days_expr": days_expr})
+    data = []
+    for row in result:
+        # row[0] = date, row[1] = weight, row[2] = target
+        if row[2] is None or row[2] <= 0:
+            continue
+        data.append({
+            "date": row[0],
+            "weight": float(row[1]) if row[1] is not None else None,
+            "target": float(row[2])
+        })
+    return data
+
+@router.post("/run-mpt-modeling")
+def run_mpt_modeling(params: Dict[str, Any], background_tasks: BackgroundTasks):
+    """
+    Initiate an MPT modeling task and return a task ID for polling status.
+    """
+    try:
+        task_id = initiate_mpt_modeling(background_tasks, params)
+        return {"task_id": task_id, "message": "MPT modeling task initiated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initiate MPT modeling task: {str(e)}")
+
+@router.get("/task-status/{task_id}")
+def check_task_status(task_id: str):
+    """
+    Check the status of an MPT modeling task by ID.
+    """
+    try:
+        status_data = get_task_status(task_id)
+        return status_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check task status: {str(e)}")

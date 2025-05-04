@@ -1,14 +1,23 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import logging
 from datetime import datetime
 import os
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
 
 from app.core.config import settings
 from app.api.routes import router as api_router
 from app.api.crudroutes import router as crud_router
 from app.scheduler.config import initialize_scheduler, scheduler, load_job_states, save_job_states
+from .mpt_modeling import (
+    initiate_mpt_modeling,
+    get_task_status,
+    save_to_repository,
+    list_repository_runs,
+    get_repository_run
+)
 
 # Configure logging
 logging.basicConfig(
@@ -40,6 +49,21 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 # Include API routers
 app.include_router(api_router, prefix="/api")
 app.include_router(crud_router, prefix="/api/crud")
+
+class OptimizationRequest(BaseModel):
+    gamma: Optional[float] = None
+    targetReturn: float
+    targetRisk: float
+    lowerBound: float
+    upperBound: float
+    objective: str
+    refreshData: bool = False
+    useSectorConstraints: bool = False
+    sectorConstraints: Optional[Dict[str, Dict[str, float]]] = None
+
+class SaveToRepoRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 @app.on_event("startup")
 def startup_event():
@@ -180,6 +204,36 @@ def run_job_now(job_id: str):
     except Exception as e:
         logger.error(f"Error executing job {job_id}: {str(e)}")
         return {"success": False, "message": str(e)}
+
+@app.post("/api/run-mpt-modeling")
+async def run_mpt_modeling(request: OptimizationRequest, background_tasks: BackgroundTasks):
+    task_id = initiate_mpt_modeling(background_tasks, request.dict())
+    return {"task_id": task_id}
+
+@app.get("/api/task-status/{task_id}")
+async def get_task_status_endpoint(task_id: str):
+    return get_task_status(task_id)
+
+@app.post("/api/save-to-repository/{task_id}")
+async def save_to_repository_endpoint(task_id: str, request: SaveToRepoRequest):
+    result = save_to_repository(task_id, request.name, request.description)
+    if not result['success']:
+        raise HTTPException(status_code=400, detail=result['error'])
+    return result
+
+@app.get("/api/repository/runs")
+async def list_repository_runs_endpoint():
+    result = list_repository_runs()
+    if not result['success']:
+        raise HTTPException(status_code=500, detail=result['error'])
+    return result
+
+@app.get("/api/repository/runs/{run_id}")
+async def get_repository_run_endpoint(run_id: str):
+    result = get_repository_run(run_id)
+    if not result['success']:
+        raise HTTPException(status_code=404, detail=result['error'])
+    return result
 
 if __name__ == "__main__":
     import uvicorn

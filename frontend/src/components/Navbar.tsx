@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom';
 const Navbar: React.FC = () => {
   const [isChartsOpen, setIsChartsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isModellingOpen, setIsModellingOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check if user has a dark mode preference
     if (typeof window !== 'undefined') {
@@ -43,11 +44,12 @@ const Navbar: React.FC = () => {
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isChartsOpen || isSettingsOpen) {
+      if (isChartsOpen || isSettingsOpen || isModellingOpen) {
         const target = event.target as HTMLElement;
         if (!target.closest('.dropdown-container')) {
           setIsChartsOpen(false);
           setIsSettingsOpen(false);
+          setIsModellingOpen(false);
         }
       }
     };
@@ -56,7 +58,7 @@ const Navbar: React.FC = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isChartsOpen, isSettingsOpen]);
+  }, [isChartsOpen, isSettingsOpen, isModellingOpen]);
 
   return (
     <nav className="bg-white dark:bg-gray-800 shadow-lg">
@@ -81,12 +83,6 @@ const Navbar: React.FC = () => {
                 className="border-transparent text-gray-500 dark:text-gray-300 hover:border-primary-500 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium h-full"
               >
                 Holdings
-              </Link>
-              <Link
-                to="/modelling"
-                className="border-transparent text-gray-500 dark:text-gray-300 hover:border-primary-500 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium h-full"
-              >
-                Modelling
               </Link>
               <Link
                 to="/potential-lots"
@@ -162,6 +158,14 @@ const Navbar: React.FC = () => {
                       >
                         Dividend History
                       </Link>
+                      <Link
+                        to="/charts/allocation"
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        role="menuitem"
+                        onClick={() => setIsChartsOpen(false)}
+                      >
+                        Allocation Grid
+                      </Link>
                     </div>
                   </div>
                 )}
@@ -209,6 +213,65 @@ const Navbar: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* Modelling Dropdown */}
+              <div className="relative inline-flex items-center h-full dropdown-container">
+                <button
+                  onClick={() => {
+                    setIsModellingOpen(!isModellingOpen);
+                    setIsChartsOpen(false);
+                    setIsSettingsOpen(false);
+                  }}
+                  className="border-transparent text-gray-500 dark:text-gray-300 hover:border-primary-500 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium h-full"
+                >
+                  Modelling
+                  <svg
+                    className="ml-2 h-5 w-5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+
+                {/* Modelling Dropdown Menu */}
+                {isModellingOpen && (
+                  <div className="absolute left-0 top-full mt-1 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-10">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                      <Link
+                        to="/modelling/mpt"
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        role="menuitem"
+                        onClick={() => setIsModellingOpen(false)}
+                      >
+                        MPT Modelling
+                      </Link>
+                      <Link
+                        to="/modelling/results-explorer"
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        role="menuitem"
+                        onClick={() => setIsModellingOpen(false)}
+                      >
+                        Results Explorer
+                      </Link>
+                      <Link
+                        to="/modelling/recommendations"
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        role="menuitem"
+                        onClick={() => setIsModellingOpen(false)}
+                      >
+                        Buy Recommendations
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -249,10 +312,16 @@ const Navbar: React.FC = () => {
             Holdings
           </Link>
           <Link
-            to="/modelling"
+            to="/modelling/mpt"
             className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-primary-500 hover:text-gray-800 dark:hover:text-gray-100"
           >
-            Modelling
+            MPT Modelling
+          </Link>
+          <Link
+            to="/modelling/results-explorer"
+            className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-primary-500 hover:text-gray-800 dark:hover:text-gray-100"
+          >
+            Results Explorer
           </Link>
           <Link
             to="/settings/scheduler"

@@ -44,4 +44,19 @@ def register_jobs(scheduler: BackgroundScheduler):
     
     logger.info(f"Registered job: price_updater (runs daily at 9:35 AM ET, weekdays only)")
     
+    # Register the moving averages job to run daily at 10:00 AM ET on weekdays only
+    scheduler.add_job(
+        func=tasks_module.moving_averages_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",  # Monday through Friday only
+            hour="17",  # 10 AM
+            minute="5",  # At minute 0
+            timezone=US_EASTERN
+        ),
+        id="moving_averages_job",
+        name="Update Moving Averages and Stats",
+        replace_existing=True
+    )
+    logger.info("Registered job: moving_averages_job (runs daily at 10:00 AM ET, weekdays only)")
+    
     # Add additional jobs here as needed 

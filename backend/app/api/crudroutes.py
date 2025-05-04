@@ -61,6 +61,7 @@ def update_transaction(transaction_id: int, transaction: TransactionUpdate, db: 
         )
         
         if not updated_transaction:
+            
             raise HTTPException(status_code=404, detail=f"Transaction {transaction_id} not found")
         
         # Convert SQLAlchemy model to dictionary for response

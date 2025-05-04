@@ -3,6 +3,7 @@
 # Import the overamt task functions for use by the scheduler
 from .overamt_task import run_update
 from .price_updater_task import update_prices
+from .moving_averages_task import run_moving_averages
 
 # Create the main entry point for the scheduler
 def update_overamt():
@@ -59,4 +60,22 @@ def price_updater():
     
     except Exception as e:
         logger.exception(f"Error in price_updater task: {str(e)}")
+        return False
+
+def moving_averages_job():
+    """
+    Entry point for the moving averages/statistics job.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Executing moving_averages_job")
+    try:
+        success = run_moving_averages()
+        if success:
+            logger.info("moving_averages_job completed successfully")
+        else:
+            logger.error("moving_averages_job failed")
+        return success
+    except Exception as e:
+        logger.exception(f"Error in moving_averages_job: {e}")
         return False 
