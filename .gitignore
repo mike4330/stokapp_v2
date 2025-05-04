@@ -59,3 +59,12 @@ build/
 
 # Optional eslint cache
 .eslintcache
+backend/app.log
+
+# Data, cache, and model output
+backend/yfinance.cache
+backend/app/logs/
+backend/app/pricedataset.csv
+backend/model_repository/*.json
+frontend/reference_code/*.csv
+frontend/reference_code/*.cache
