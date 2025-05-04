@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface OptimizationConstraints {
   gamma: number;
@@ -101,6 +101,7 @@ const MPTModelling: React.FC = () => {
   const [sectorConstraints, setSectorConstraints] = useState<SectorConstraints>(DEFAULT_SECTOR_CONSTRAINTS);
   const [savingToRepo, setSavingToRepo] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [isDebugExpanded, setIsDebugExpanded] = useState(false);
   const [isSectorConstraintsExpanded, setIsSectorConstraintsExpanded] = useState(true);
 
@@ -237,6 +238,7 @@ const MPTModelling: React.FC = () => {
     try {
       setSavingToRepo(true);
       setSaveError(null);
+      setSaveSuccess(false);
 
       const response = await fetch(`/api/save-to-repository/${taskId}`, {
         method: 'POST',
@@ -252,8 +254,9 @@ const MPTModelling: React.FC = () => {
         throw new Error(data.error || 'Failed to save to repository');
       }
       
-      // Show success message
-      alert('Successfully saved to repository!');
+      // Show success state on button
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 1500);
       
     } catch (err: any) {
       setSaveError(err.message || 'Failed to save to repository');
@@ -268,8 +271,13 @@ const MPTModelling: React.FC = () => {
       .sort(([, a], [, b]) => b - a) // Sort by weight descending
       .map(([ticker, weight]) => ({
         ticker,
-        weight: +(weight * 100).toFixed(4)  // Convert to percentage and fix precision
+        weight: +weight.toFixed(6) // Keep as decimal for chart, fix precision
       }));
+  };
+
+  // Helper to get max weight as a decimal (not percent)
+  const getMaxWeight = (weights: { [key: string]: number }) => {
+    return Math.max(...Object.values(weights));
   };
 
   return (
@@ -429,30 +437,80 @@ const MPTModelling: React.FC = () => {
                 }`}
               >
                 <div className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Real-time sum of min values */}
+                  <div className="mb-2 text-right">
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Sum of Min values: </span>
+                    <span className="text-base font-bold text-green-700 dark:text-green-400">
+                      {Object.values(sectorConstraints).reduce((acc, { min }) => acc + (Number(min) || 0), 0).toFixed(4)}
+                    </span>
+                    <br />
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Bonds (FBonds + DBonds) Min Sum: </span>
+                    <span className="text-base font-bold text-blue-700 dark:text-blue-400">
+                      {((Number(sectorConstraints['FBonds']?.min || 0) + Number(sectorConstraints['DBonds']?.min || 0)).toFixed(4))}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     {Object.entries(sectorConstraints).map(([sector, { min, max }]) => (
                       <div key={sector} className="p-2 bg-white dark:bg-gray-600 rounded border border-gray-300 dark:border-gray-700">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{sector}</div>
+                        <div className="font-medium text-gray-900 dark:text-gray-100 mb-2">{sector}</div>
                         <div className="flex justify-between items-center mt-1">
-                          <label className="text-sm text-gray-700 dark:text-gray-300">
-                            Min:
-                            <input
-                              type="number"
-                              step="0.0001"
-                              value={min}
-                              onChange={(e) => handleSectorConstraintChange(sector, 'min', e.target.value)}
-                              className="w-20 ml-1 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
-                            />
+                          <label className="text-base text-gray-700 dark:text-gray-300 flex flex-col items-start">
+                            <span className="mb-1">Min:</span>
+                            <div className="flex items-center space-x-1">
+                              <button
+                                type="button"
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-700 hover:bg-gray-800 text-white text-lg focus:outline-none border border-gray-500"
+                                onClick={() => handleSectorConstraintChange(sector, 'min', (min - 0.0001).toFixed(5))}
+                                tabIndex={-1}
+                              >
+                                &minus;
+                              </button>
+                              <input
+                                type="number"
+                                step="0.0001"
+                                value={min}
+                                onChange={(e) => handleSectorConstraintChange(sector, 'min', e.target.value)}
+                                className="w-20 px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-base dark:bg-gray-700 dark:text-white appearance-none"
+                                style={{ MozAppearance: 'textfield' }}
+                              />
+                              <button
+                                type="button"
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-green-600 hover:bg-green-700 text-white text-lg focus:outline-none border border-green-700"
+                                onClick={() => handleSectorConstraintChange(sector, 'min', (min + 0.0001).toFixed(5))}
+                                tabIndex={-1}
+                              >
+                                +
+                              </button>
+                            </div>
                           </label>
-                          <label className="text-sm text-gray-700 dark:text-gray-300">
-                            Max:
-                            <input
-                              type="number"
-                              step="0.0001"
-                              value={max}
-                              onChange={(e) => handleSectorConstraintChange(sector, 'max', e.target.value)}
-                              className="w-20 ml-1 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
-                            />
+                          <label className="text-base text-gray-700 dark:text-gray-300 flex flex-col items-start">
+                            <span className="mb-1">Max:</span>
+                            <div className="flex items-center space-x-1">
+                              <button
+                                type="button"
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-700 hover:bg-gray-800 text-white text-lg focus:outline-none border border-gray-500"
+                                onClick={() => handleSectorConstraintChange(sector, 'max', (max - 0.0001).toFixed(5))}
+                                tabIndex={-1}
+                              >
+                                &minus;
+                              </button>
+                              <input
+                                type="number"
+                                step="0.0001"
+                                value={max}
+                                onChange={(e) => handleSectorConstraintChange(sector, 'max', e.target.value)}
+                                className="w-20 px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-base dark:bg-gray-700 dark:text-white appearance-none"
+                                style={{ MozAppearance: 'textfield' }}
+                              />
+                              <button
+                                type="button"
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-green-600 hover:bg-green-700 text-white text-lg focus:outline-none border border-green-700"
+                                onClick={() => handleSectorConstraintChange(sector, 'max', (max + 0.0001).toFixed(5))}
+                                tabIndex={-1}
+                              >
+                                +
+                              </button>
+                            </div>
                           </label>
                         </div>
                       </div>
@@ -652,23 +710,25 @@ const MPTModelling: React.FC = () => {
                 <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Optimized Portfolio Weights:</h5>
                 
                 {/* Add the bar chart */}
-                <div className="mb-4 h-[300px]">
+                <div className="mb-4 h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={prepareWeightsChartData(modelingResult.weights)}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                      margin={{ top: 30, right: 40, left: 30, bottom: 0 }}
                     >
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                       <XAxis
                         dataKey="ticker"
                         angle={-45}
                         textAnchor="end"
-                        height={60}
+                        height={56}
                         interval={0}
-                        tick={{ fill: 'currentColor', fontSize: 12 }}
+                        tick={{ fill: '#fff', fontSize: 13, fontWeight: 600 }}
                       />
                       <YAxis
-                        tickFormatter={(value) => `${value}%`}
-                        tick={{ fill: 'currentColor', fontSize: 12 }}
+                        domain={[0, getMaxWeight(modelingResult.weights) * 1.1]}
+                        tickFormatter={(value) => `${(value * 100).toFixed(2)}%`}
+                        tick={{ fill: '#fff', fontSize: 13, fontWeight: 600 }}
                       />
                       <Tooltip
                         formatter={(value: number) => [`${value.toFixed(4)}%`, 'Weight']}
@@ -678,11 +738,14 @@ const MPTModelling: React.FC = () => {
                           borderRadius: '0.375rem',
                           color: 'white'
                         }}
+                        labelStyle={{ color: '#fff', fontWeight: 700 }}
+                        itemStyle={{ color: '#fff' }}
                       />
                       <Bar
                         dataKey="weight"
-                        fill="#059669"
+                        fill="rgba(16, 185, 129, 0.7)"
                         radius={[4, 4, 0, 0]}
+                        barSize={18}
                       />
                     </BarChart>
                   </ResponsiveContainer>
@@ -734,6 +797,8 @@ const MPTModelling: React.FC = () => {
                 >
                   {savingToRepo ? (
                     <span>Saving...</span>
+                  ) : saveSuccess ? (
+                    <span>Saved!</span>
                   ) : (
                     <>
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
