@@ -120,7 +120,7 @@ const PotentialLots: React.FC = () => {
   if (error) return <div className="p-4 text-red-500">{error}</div>;
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="py-8">
       <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">
         Potential Lots for Sale
       </h1>

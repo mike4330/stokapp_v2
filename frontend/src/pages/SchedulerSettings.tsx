@@ -134,7 +134,7 @@ const SchedulerSettings: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
           Scheduler Settings
@@ -327,4 +327,4 @@ const SchedulerSettings: React.FC = () => {
   );
 };
 
-export default SchedulerSettings; 
+export default SchedulerSettings;

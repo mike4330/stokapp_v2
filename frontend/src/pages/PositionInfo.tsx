@@ -132,7 +132,7 @@ const PositionInfo: React.FC = () => {
   if (!position) return <div className="p-4 text-gray-300">Position not found</div>;
 
   return (
-    <div className="p-4 text-gray-300">
+    <div className="text-gray-300">
       <div className="mb-4">
         <Link to="/holdings" className="text-primary-400 hover:text-primary-300 flex items-center">
           <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -155,7 +155,13 @@ const PositionInfo: React.FC = () => {
           <h1 className="text-2xl font-bold text-white">{position.symbol}</h1>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div
+          className="grid grid-cols-1 gap-6"
+          style={{
+            gridTemplateColumns: '1.5fr 1fr 1fr',
+            minWidth: 0,
+          }}
+        >
           <div className="bg-gray-900/50 p-6 rounded-lg">
             <h2 className="text-lg font-semibold mb-4 text-white">Position Details</h2>
             <PositionDetails position={position} />
