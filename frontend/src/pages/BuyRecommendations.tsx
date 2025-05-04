@@ -34,9 +34,9 @@ const BuyRecommendations: React.FC = () => {
   }, []);
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+        <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
           Buy Recommendations
         </h1>
         <button

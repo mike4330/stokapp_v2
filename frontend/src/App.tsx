@@ -33,7 +33,7 @@ function App() {
         <div className="sticky top-0 z-50">
           <Navbar />
         </div>
-        <main className="container mx-auto px-4 py-8">
+        <main className="app-container mx-auto py-8">
           <Routes>
             <Route path="/" element={<Holdings />} />
             <Route path="/transactions" element={<Transactions />} />

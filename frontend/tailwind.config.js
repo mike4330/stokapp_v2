@@ -21,6 +21,14 @@ module.exports = {
           900: '#0c4a6e',
         },
       },
+      container: {
+        padding: {
+          DEFAULT: '0rem',
+          sm: '0rem',
+          lg: '0rem',
+          xl: '0rem',
+        },
+      },
       keyframes: {
         fadeIn: {
           '0%': { opacity: '0' },

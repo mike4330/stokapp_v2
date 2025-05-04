@@ -15,3 +15,24 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Custom container class for global margin control */
+.app-container {
+  padding-left: 2rem;  /* 32px */
+  padding-right: 2rem; /* 32px */
+}
+
+/* Responsive adjustments */
+@media (min-width: 768px) {
+  .app-container {
+    padding-left: 3rem;  /* 48px */
+    padding-right: 3rem; /* 48px */
+  }
+}
+
+@media (min-width: 1280px) {
+  .app-container {
+    padding-left: 4rem;  /* 64px */
+    padding-right: 4rem; /* 64px */
+  }
+}

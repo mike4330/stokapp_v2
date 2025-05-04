@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import SymbolWeightChart from '../components/SymbolWeightChart';
 
 const colorPalette = [
-  '#a78bfa', '#f472b6', '#fbcfe8', '#ec4899', '#c4b5fd', '#8b5cf6', '#60a5fa', '#4ade80',
+  '#fe1111', '#f472b6', '#fbcfe8', '#ec4899', '#c4b5fd', '#8b5cf6', '#60a5fa', '#4ade80',
   '#facc15', '#f87171', '#38bdf8', '#fbbf24', '#34d399', '#f472b6', '#818cf8', '#f59e42',
   '#f472b6', '#a3e635', '#f87171', '#fbbf24', '#f472b6', '#f472b6', '#f472b6', '#f472b6',
 ];

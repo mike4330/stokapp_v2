@@ -257,7 +257,7 @@ const Holdings: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="py-8">
       {/* Portfolio Summary - No changes needed here */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
