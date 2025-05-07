@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta
 import numpy as np
 import logging
 from sklearn.preprocessing import StandardScaler
+import os
+import pandas as pd
 
 from app.db.session import get_db
 from app.db import crud
@@ -303,6 +305,12 @@ def get_sector_allocation(db: Session = Depends(get_db)):
                     "position_value": position_value
                 })
         
+        # Sector name normalization mapping
+        sector_name_map = {
+            "Health Care": "Healthcare"
+            # Add more mappings as needed
+        }
+        
         # Get sector information and calculate sector totals
         sector_totals = {}
         total_portfolio_value = sum(h["position_value"] for h in holdings)
@@ -316,7 +324,10 @@ def get_sector_allocation(db: Session = Depends(get_db)):
             sector_result = db.execute(sector_query, {"symbol": holding["symbol"]}).fetchone()
             
             if sector_result:
-                sector = sector_result[0]
+                original_sector = sector_result[0]
+                # Normalize sector name
+                sector = sector_name_map.get(original_sector, original_sector)
+                
                 if sector not in sector_totals:
                     sector_totals[sector] = 0
                 sector_totals[sector] += holding["position_value"]
@@ -1257,3 +1268,42 @@ def check_task_status(task_id: str):
         return status_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to check task status: {str(e)}")
+
+@router.get("/data-status")
+def get_data_status(db: Session = Depends(get_db)):
+    """Get the status of the price data file and the latest date in the dataset"""
+    try:
+        # Check if the file exists
+        file_exists = os.path.exists('app/data/pricedataset.csv')
+        
+        # Get the latest date from the database if available
+        latest_date = None
+        if file_exists:
+            try:
+                # Check the latest date in the security_values table
+                query = text("""
+                    SELECT MAX(timestamp)
+                    FROM security_values
+                """)
+                result = db.execute(query).fetchone()
+                if result and result[0]:
+                    latest_date = result[0].strftime('%Y-%m-%d')
+                    
+                # If not found in security_values, try reading from CSV directly    
+                if not latest_date:
+                    try:
+                        df = pd.read_csv('app/data/pricedataset.csv')
+                        if 'Date' in df.columns and not df.empty:
+                            latest_date = pd.to_datetime(df['Date']).max().strftime('%Y-%m-%d')
+                    except Exception as e:
+                        logging.error(f"Error reading price dataset CSV: {str(e)}")
+            except Exception as e:
+                logging.error(f"Error querying database for latest date: {str(e)}")
+        
+        return {
+            "available": file_exists,
+            "latest_date": latest_date
+        }
+    except Exception as e:
+        logging.error(f"Error in get_data_status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

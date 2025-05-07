@@ -35,11 +35,12 @@ const ResultsExplorer: React.FC = () => {
   const [runs, setRuns] = useState<RunMeta[]>([]);
   const [runDetails, setRunDetails] = useState<RunDetail[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRun, setSelectedRun] = useState<RunDetail | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [compareRuns, setCompareRuns] = useState<RunDetail[]>([]);
   const [compareMode, setCompareMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sortColumn, setSortColumn] = useState<string>('timestamp');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [objectiveFilters, setObjectiveFilters] = useState<Record<string, boolean>>({
     max_sharpe: true,
     min_volatility: true,
@@ -75,21 +76,6 @@ const ResultsExplorer: React.FC = () => {
       });
   }, []);
 
-  // Fetch details for a single run
-  const fetchRunDetail = async (runId: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/repository/runs/${runId}`);
-      const data = await res.json();
-      setSelectedRun(data.run);
-    } catch {
-      setError('Failed to load run details');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Fetch details for multiple runs for comparison
   const fetchCompareRuns = async (ids: string[]) => {
     setLoading(true);
@@ -118,27 +104,42 @@ const ResultsExplorer: React.FC = () => {
     );
   };
 
-  // Render weights as pie chart
-  const renderWeightsPie = (weights: Record<string, number>) => {
-    const data = Object.entries(weights).map(([k, v]) => ({ name: k, value: +(v * 100).toFixed(4) }));
+  // Render weights as bar chart
+  const renderWeightsBar = (weights: Record<string, number>) => {
+    // Sort data by weight in descending order
+    const data = Object.entries(weights)
+      .sort(([, a], [, b]) => b - a)
+      .map(([k, v]) => ({ asset: k, weight: +(v * 100).toFixed(4) }));
+    
     return (
-      <ResponsiveContainer width="100%" height={300}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={110} label>
-            {data.map((entry, idx) => (
-              <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
-            ))}
-          </Pie>
+      <ResponsiveContainer width="100%" height={400}>
+        <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 120 }}>
+          <XAxis 
+            dataKey="asset" 
+            angle={-90} 
+            textAnchor="end" 
+            height={120} 
+            interval={0} 
+            tick={{ fontSize: 11 }}
+          />
+          <YAxis tickFormatter={v => `${v}%`} tick={{ fontSize: 12 }} />
           <Tooltip formatter={(v: number) => `${v.toFixed(4)}%`} />
-          <Legend />
-        </PieChart>
+          <Bar dataKey="weight" radius={[4, 4, 0, 0]}>
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            ))}
+          </Bar>
+        </BarChart>
       </ResponsiveContainer>
     );
   };
 
   // Render sector weights as bar chart
   const renderSectorBar = (sectorWeights: Record<string, number>) => {
-    const data = Object.entries(sectorWeights).map(([k, v]) => ({ sector: k, weight: +(v * 100).toFixed(4) }));
+    const data = Object.entries(sectorWeights)
+      .sort(([, a], [, b]) => b - a) // Sort by weight in descending order
+      .map(([k, v]) => ({ sector: k, weight: +(v * 100).toFixed(4) }));
+    
     return (
       <ResponsiveContainer width="100%" height={250}>
         <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
@@ -170,6 +171,87 @@ const ResultsExplorer: React.FC = () => {
     return objective;
   };
 
+  // Handle sorting
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      // Default sort direction for different column types
+      if (['expected_return', 'volatility', 'sharpe_ratio'].includes(column)) {
+        setSortDirection('desc');
+      } else if (column === 'id' || column === 'objective') {
+        setSortDirection('asc');
+      } else {
+        setSortDirection('desc'); // Default for timestamp and other columns
+      }
+    }
+  };
+
+  // Sort icon component
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return <span className="text-gray-400 ml-1">↕</span>;
+    return sortDirection === 'asc' 
+      ? <span className="text-blue-500 ml-1">↑</span> 
+      : <span className="text-blue-500 ml-1">↓</span>;
+  };
+
+  // Sort the run details based on current sort column and direction
+  const getSortedRunDetails = () => {
+    const filtered = runDetails.filter(run => objectiveFilters[getObjectiveKey(run)] !== false);
+    
+    return [...filtered].sort((a, b) => {
+      const getValueForSorting = (run: RunDetail, column: string) => {
+        const p = run.parameters || {};
+        const r = run.results || {};
+        
+        switch (column) {
+          case 'id':
+            return run.id;
+          case 'timestamp':
+            return run.timestamp;
+          case 'objective':
+            const objective = p.objective || 
+              r.debug_info?.optimization?.message?.split('using ')[1]?.split(' method')[0] || '';
+            return objective;
+          case 'gamma':
+            return p.gamma !== undefined && p.gamma !== null ? p.gamma : -Infinity;
+          case 'target_return':
+            return p.target_return !== undefined ? p.target_return : -Infinity;
+          case 'target_risk':
+            return p.target_risk !== undefined ? p.target_risk : -Infinity;
+          case 'lower_bound':
+            return p.lower_bound !== undefined ? p.lower_bound : -Infinity;
+          case 'upper_bound':
+            return p.upper_bound !== undefined ? p.upper_bound : -Infinity;
+          case 'expected_return':
+            return r.expected_return !== undefined ? r.expected_return : -Infinity;
+          case 'volatility':
+            return r.volatility !== undefined ? r.volatility : -Infinity;
+          case 'sharpe_ratio':
+            return r.sharpe_ratio !== undefined ? r.sharpe_ratio : -Infinity;
+          default:
+            return '';
+        }
+      };
+
+      const aValue = getValueForSorting(a, sortColumn);
+      const bValue = getValueForSorting(b, sortColumn);
+
+      // For string comparisons
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortDirection === 'asc' 
+          ? aValue.localeCompare(bValue) 
+          : bValue.localeCompare(aValue);
+      }
+      
+      // For numeric comparisons
+      return sortDirection === 'asc' 
+        ? (aValue as number) - (bValue as number) 
+        : (bValue as number) - (aValue as number);
+    });
+  };
+
   return (
     <div className="py-8">
       <div className="flex justify-between items-center mb-6">
@@ -179,38 +261,120 @@ const ResultsExplorer: React.FC = () => {
         <div className="bg-green-800 py-3 px-6 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-white">Saved MPT Modeling Results</h2>
           {compareMode && (
-            <button className="text-white underline" onClick={() => { setCompareMode(false); setCompareRuns([]); setSelectedIds([]); }}>Back to List</button>
+            <button className="px-3 py-1.5 bg-green-700 hover:bg-green-600 text-white text-sm rounded flex items-center transition-colors shadow" onClick={() => { setCompareMode(false); setCompareRuns([]); setSelectedIds([]); }}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to List
+            </button>
           )}
         </div>
         <div className="p-6">
-          {loading && <div>Loading...</div>}
-          {error && <div className="text-red-500">{error}</div>}
+          {loading && (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700"></div>
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded my-4">
+              {error}
+            </div>
+          )}
 
           {/* Comparison View */}
           {compareMode && compareRuns.length > 1 && (
             <div>
-              <h3 className="text-lg font-bold mb-4">Comparison</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full mb-6">
-                  <thead>
+              <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100">Comparison</h3>
+              <div className="overflow-x-auto mb-6 bg-gray-50 dark:bg-gray-900 rounded-lg shadow">
+                <table className="min-w-full">
+                  <thead className="bg-gray-100 dark:bg-gray-800">
                     <tr>
-                      <th className="px-4 py-2">Run</th>
-                      <th className="px-4 py-2">Date</th>
-                      <th className="px-4 py-2">Objective</th>
-                      <th className="px-4 py-2">Exp. Return</th>
-                      <th className="px-4 py-2">Volatility</th>
-                      <th className="px-4 py-2">Sharpe</th>
+                      <th 
+                        className="px-4 py-2 text-left text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('id')}
+                      >
+                        Run <SortIcon column="id" />
+                      </th>
+                      <th 
+                        className="px-4 py-2 text-left text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('timestamp')}
+                      >
+                        Date <SortIcon column="timestamp" />
+                      </th>
+                      <th 
+                        className="px-4 py-2 text-left text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('objective')}
+                      >
+                        Objective <SortIcon column="objective" />
+                      </th>
+                      <th 
+                        className="px-4 py-2 text-right text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('expected_return')}
+                      >
+                        Exp. Return <SortIcon column="expected_return" />
+                      </th>
+                      <th 
+                        className="px-4 py-2 text-right text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('volatility')}
+                      >
+                        Volatility <SortIcon column="volatility" />
+                      </th>
+                      <th 
+                        className="px-4 py-2 text-right text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('sharpe_ratio')}
+                      >
+                        Sharpe <SortIcon column="sharpe_ratio" />
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {compareRuns.map(run => (
-                      <tr key={run.id} className="bg-gray-50 dark:bg-gray-700">
-                        <td className="px-4 py-2 font-mono">{run.id}</td>
-                        <td className="px-4 py-2">{run.timestamp}</td>
-                        <td className="px-4 py-2">{run.parameters?.objective || run.results?.debug_info?.optimization?.message?.split('using ')[1]?.split(' method')[0]}</td>
-                        <td className="px-4 py-2">{(run.results?.expected_return * 100).toFixed(2)}%</td>
-                        <td className="px-4 py-2">{(run.results?.volatility * 100).toFixed(2)}%</td>
-                        <td className="px-4 py-2">{run.results?.sharpe_ratio?.toFixed(3)}</td>
+                    {[...compareRuns].sort((a, b) => {
+                      const getValueForSorting = (run: RunDetail, column: string) => {
+                        const p = run.parameters || {};
+                        const r = run.results || {};
+                        
+                        switch (column) {
+                          case 'id':
+                            return run.id;
+                          case 'timestamp':
+                            return run.timestamp;
+                          case 'objective':
+                            const objective = p.objective || 
+                              r.debug_info?.optimization?.message?.split('using ')[1]?.split(' method')[0] || '';
+                            return objective;
+                          case 'expected_return':
+                            return r.expected_return !== undefined ? r.expected_return : -Infinity;
+                          case 'volatility':
+                            return r.volatility !== undefined ? r.volatility : -Infinity;
+                          case 'sharpe_ratio':
+                            return r.sharpe_ratio !== undefined ? r.sharpe_ratio : -Infinity;
+                          default:
+                            return '';
+                        }
+                      };
+
+                      const aValue = getValueForSorting(a, sortColumn);
+                      const bValue = getValueForSorting(b, sortColumn);
+
+                      // For string comparisons
+                      if (typeof aValue === 'string' && typeof bValue === 'string') {
+                        return sortDirection === 'asc' 
+                          ? aValue.localeCompare(bValue) 
+                          : bValue.localeCompare(aValue);
+                      }
+                      
+                      // For numeric comparisons
+                      return sortDirection === 'asc' 
+                        ? (aValue as number) - (bValue as number) 
+                        : (bValue as number) - (aValue as number);
+                    }).map((run, idx) => (
+                      <tr key={run.id} className={idx % 2 === 0 ? "bg-white dark:bg-gray-800/50" : "bg-gray-50 dark:bg-gray-700/50"}>
+                        <td className="px-4 py-2 font-mono text-gray-700 dark:text-gray-300">{run.id}</td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{run.timestamp}</td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{run.parameters?.objective || run.results?.debug_info?.optimization?.message?.split('using ')[1]?.split(' method')[0]}</td>
+                        <td className="px-4 py-2 text-right font-medium text-gray-700 dark:text-gray-300">{(run.results?.expected_return * 100).toFixed(2)}%</td>
+                        <td className="px-4 py-2 text-right font-medium text-gray-700 dark:text-gray-300">{(run.results?.volatility * 100).toFixed(2)}%</td>
+                        <td className="px-4 py-2 text-right font-medium text-gray-700 dark:text-gray-300">{run.results?.sharpe_ratio?.toFixed(3)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -218,12 +382,30 @@ const ResultsExplorer: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {compareRuns.map((run, idx) => (
-                  <div key={run.id} className="bg-gray-100 dark:bg-gray-900 p-4 rounded shadow">
-                    <h4 className="font-semibold mb-2">{run.name} ({run.id})</h4>
-                    <div className="mb-2">Exp. Return: <span className="font-mono">{(run.results?.expected_return * 100).toFixed(2)}%</span></div>
-                    <div className="mb-2">Volatility: <span className="font-mono">{(run.results?.volatility * 100).toFixed(2)}%</span></div>
-                    <div className="mb-2">Sharpe Ratio: <span className="font-mono">{run.results?.sharpe_ratio?.toFixed(3)}</span></div>
-                    <div className="mb-2">Objective: <span className="font-mono">{run.parameters?.objective || run.results?.debug_info?.optimization?.message?.split('using ')[1]?.split(' method')[0]}</span></div>
+                  <div key={run.id} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow">
+                    <h4 className="font-semibold mb-2 text-lg text-gray-900 dark:text-gray-100">{run.name || `Run ${idx + 1}`} ({run.id})</h4>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <div className="mb-2 flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Exp. Return:</span>
+                          <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{(run.results?.expected_return * 100).toFixed(2)}%</span>
+                        </div>
+                        <div className="mb-2 flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Volatility:</span>
+                          <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{(run.results?.volatility * 100).toFixed(2)}%</span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-2 flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Sharpe Ratio:</span>
+                          <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{run.results?.sharpe_ratio?.toFixed(3)}</span>
+                        </div>
+                        <div className="mb-2 flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Objective:</span>
+                          <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{run.parameters?.objective || run.results?.debug_info?.optimization?.message?.split('using ')[1]?.split(' method')[0]}</span>
+                        </div>
+                      </div>
+                    </div>
                     <div className="mb-4">{renderSectorBar(run.results?.sector_weights || {})}</div>
                   </div>
                 ))}
@@ -231,62 +413,11 @@ const ResultsExplorer: React.FC = () => {
             </div>
           )}
 
-          {/* Detail View */}
-          {selectedRun && !compareMode && (
-            <div>
-              <button className="mb-4 text-green-700 dark:text-green-400 underline" onClick={() => setSelectedRun(null)}>&larr; Back to List</button>
-              <h3 className="text-lg font-bold mb-2">Run Details</h3>
-              <div className="mb-2">Run ID: <span className="font-mono">{selectedRun.id}</span></div>
-              <div className="mb-2">Date: {selectedRun.timestamp}</div>
-              <div className="mb-2">Objective: <span className="font-mono">{selectedRun.parameters?.objective || selectedRun.results?.debug_info?.optimization?.message?.split('using ')[1]?.split(' method')[0]}</span></div>
-              <div className="mb-2">Exp. Return: <span className="font-mono">{(selectedRun.results?.expected_return * 100).toFixed(2)}%</span></div>
-              <div className="mb-2">Volatility: <span className="font-mono">{(selectedRun.results?.volatility * 100).toFixed(2)}%</span></div>
-              <div className="mb-2">Sharpe Ratio: <span className="font-mono">{selectedRun.results?.sharpe_ratio?.toFixed(3)}</span></div>
-              <div className="mb-4">{renderSectorBar(selectedRun.results?.sector_weights || {})}</div>
-              <div className="mb-4">{renderWeightsPie(selectedRun.results?.weights || {})}</div>
-              <div className="mb-4">
-                <h4 className="font-semibold mb-2">Asset Weights</h4>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead>
-                      <tr>
-                        <th className="px-2 py-1">Ticker</th>
-                        <th className="px-2 py-1">Weight (%)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(selectedRun.results?.weights || {})
-                        .sort(([, a], [, b]) => (b as number) - (a as number))
-                        .map(([ticker, weight]) => (
-                          <tr key={ticker}>
-                            <td className="px-2 py-1 font-mono">{ticker}</td>
-                            <td className="px-2 py-1">{((weight as number) * 100).toFixed(4)}</td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div className="mb-4">
-                <h4 className="font-semibold mb-2">Parameters</h4>
-                <pre className="bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs overflow-x-auto">
-                  {JSON.stringify(selectedRun.parameters, null, 2)}
-                </pre>
-              </div>
-              <div className="mb-4">
-                <h4 className="font-semibold mb-2">Debug Info</h4>
-                <pre className="bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs overflow-x-auto">
-                  {JSON.stringify(selectedRun.results?.debug_info, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
-
           {/* List View */}
-          {!selectedRun && !compareMode && (
+          {!compareMode && (
             <div>
               {/* Objective Filter Toggles */}
-              <div className="mb-4 flex flex-wrap gap-4 items-center">
+              <div className="mb-4 flex flex-wrap gap-4 items-center bg-gray-50 dark:bg-gray-900 p-4 rounded-lg">
                 <span className="font-medium text-gray-700 dark:text-gray-200 mr-2">Filter by Objective:</span>
                 {OBJECTIVE_KEYS.map(key => (
                   <label key={key} className="flex items-center space-x-1 text-sm">
@@ -296,57 +427,137 @@ const ResultsExplorer: React.FC = () => {
                       onChange={() => setObjectiveFilters(f => ({ ...f, [key]: !f[key] }))}
                       className="form-checkbox h-4 w-4 text-green-600"
                     />
-                    <span>{OBJECTIVE_LABELS[key]}</span>
+                    <span className="text-gray-700 dark:text-gray-300">{OBJECTIVE_LABELS[key]}</span>
                   </label>
                 ))}
               </div>
               <div className="mb-4 flex items-center justify-between">
-                <div className="text-sm text-gray-600 dark:text-gray-300">{runs.length} runs saved</div>
+                <div className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 px-3 py-1 rounded-lg">
+                  {runs.length} runs saved
+                </div>
                 <button
-                  className="px-3 py-1 bg-green-700 text-white rounded shadow text-sm disabled:opacity-50"
+                  className="px-3 py-1.5 bg-green-700 hover:bg-green-600 text-white rounded shadow text-sm disabled:opacity-50 flex items-center"
                   disabled={selectedIds.length < 2}
                   onClick={() => fetchCompareRuns(selectedIds)}
                 >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
                   Compare Selected ({selectedIds.length})
                 </button>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto bg-gray-50 dark:bg-gray-900 rounded-lg shadow">
                 <table className="min-w-full text-xs md:text-sm">
-                  <thead>
+                  <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
                     <tr>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Run ID</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Timestamp</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Objective</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Gamma</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Target Return</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Target Risk</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Lower Bound</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Upper Bound</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Expected Return</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Volatility</th>
-                      <th className="px-2 py-1 font-semibold text-gray-700 dark:text-gray-300">Sharpe Ratio</th>
+                      <th className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-left">Actions</th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-left cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('id')}
+                      >
+                        Run ID <SortIcon column="id" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-left cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('timestamp')}
+                      >
+                        Timestamp <SortIcon column="timestamp" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-left cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('objective')}
+                      >
+                        Objective <SortIcon column="objective" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('gamma')}
+                      >
+                        Gamma <SortIcon column="gamma" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('target_return')}
+                      >
+                        Target Return <SortIcon column="target_return" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('target_risk')}
+                      >
+                        Target Risk <SortIcon column="target_risk" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('lower_bound')}
+                      >
+                        Lower Bound <SortIcon column="lower_bound" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('upper_bound')}
+                      >
+                        Upper Bound <SortIcon column="upper_bound" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('expected_return')}
+                      >
+                        Expected Return <SortIcon column="expected_return" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('volatility')}
+                      >
+                        Volatility <SortIcon column="volatility" />
+                      </th>
+                      <th 
+                        className="px-2 py-2 font-semibold text-gray-900 dark:text-gray-100 text-right cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => handleSort('sharpe_ratio')}
+                      >
+                        Sharpe Ratio <SortIcon column="sharpe_ratio" />
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {runDetails.filter(run => objectiveFilters[getObjectiveKey(run)] !== false).map(run => {
+                    {getSortedRunDetails().map((run, idx) => {
                       const p = run.parameters || {};
                       const r = run.results || {};
                       const debug = r.debug_info?.optimization || {};
                       let objective = p.objective || debug.message?.split('using ')[1]?.split(' method')[0] || '';
                       if (!objective && debug.message) objective = debug.message;
                       return (
-                        <tr key={run.id} className="bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                          <td className="px-2 py-1 font-mono">{run.id}</td>
-                          <td className="px-2 py-1">{run.timestamp}</td>
-                          <td className="px-2 py-1">{objective}</td>
-                          <td className="px-2 py-1">{p.gamma !== undefined && p.gamma !== null ? p.gamma : '-'}</td>
-                          <td className="px-2 py-1">{p.target_return !== undefined ? p.target_return : '-'}</td>
-                          <td className="px-2 py-1">{p.target_risk !== undefined ? p.target_risk : '-'}</td>
-                          <td className="px-2 py-1">{p.lower_bound !== undefined ? p.lower_bound : '-'}</td>
-                          <td className="px-2 py-1">{p.upper_bound !== undefined ? p.upper_bound : '-'}</td>
-                          <td className="px-2 py-1">{r.expected_return !== undefined ? (r.expected_return * 100).toFixed(2) + '%' : '-'}</td>
-                          <td className="px-2 py-1">{r.volatility !== undefined ? (r.volatility * 100).toFixed(2) + '%' : '-'}</td>
-                          <td className="px-2 py-1">{r.sharpe_ratio !== undefined ? r.sharpe_ratio.toFixed(3) : '-'}</td>
+                        <tr key={run.id} className={idx % 2 === 0 ? "bg-white dark:bg-gray-800/50" : "bg-gray-50 dark:bg-gray-700/50"}>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.includes(run.id)}
+                                onChange={() => handleSelect(run.id)}
+                                className="form-checkbox h-4 w-4 text-green-600"
+                              />
+                              <Link 
+                                to={`/analyze/${run.id}`}
+                                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded flex items-center transition-colors"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                                Analyze
+                              </Link>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 font-mono text-gray-700 dark:text-gray-300">{run.id}</td>
+                          <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{run.timestamp}</td>
+                          <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{objective}</td>
+                          <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{p.gamma !== undefined && p.gamma !== null ? p.gamma : '-'}</td>
+                          <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{p.target_return !== undefined ? p.target_return : '-'}</td>
+                          <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{p.target_risk !== undefined ? p.target_risk : '-'}</td>
+                          <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{p.lower_bound !== undefined ? p.lower_bound : '-'}</td>
+                          <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{p.upper_bound !== undefined ? p.upper_bound : '-'}</td>
+                          <td className="px-2 py-2 text-right font-medium text-gray-700 dark:text-gray-300">{r.expected_return !== undefined ? (r.expected_return * 100).toFixed(2) + '%' : '-'}</td>
+                          <td className="px-2 py-2 text-right font-medium text-gray-700 dark:text-gray-300">{r.volatility !== undefined ? (r.volatility * 100).toFixed(2) + '%' : '-'}</td>
+                          <td className="px-2 py-2 text-right font-medium text-gray-700 dark:text-gray-300">{r.sharpe_ratio !== undefined ? r.sharpe_ratio.toFixed(3) : '-'}</td>
                         </tr>
                       );
                     })}

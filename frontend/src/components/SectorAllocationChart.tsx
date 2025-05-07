@@ -45,6 +45,12 @@ interface FilterOptions {
   commodities: boolean;
 }
 
+// Sector name normalization mapping
+const SECTOR_NAME_MAP: Record<string, string> = {
+  'Health Care': 'Healthcare',
+  // Add more mappings here if needed
+};
+
 const COLORS = [
   'rgba(0, 136, 254, 0.7)',    // Blue
   'rgba(0, 196, 159, 0.7)',    // Teal
@@ -77,8 +83,30 @@ const SectorAllocationChart: React.FC = () => {
     const fetchSectorData = async () => {
       try {
         const response = await axios.get<SectorAllocationResponse>('/api/sector-allocation');
+        
+        // Normalize sector names and merge duplicates
+        const sectorMap = new Map<string, number>();
+        
+        response.data.sectors.forEach(sectorData => {
+          // Normalize sector name using the mapping if it exists
+          const normalizedSector = SECTOR_NAME_MAP[sectorData.sector] || sectorData.sector;
+          
+          // Add value to existing sector or create new entry
+          const currentValue = sectorMap.get(normalizedSector) || 0;
+          sectorMap.set(normalizedSector, currentValue + sectorData.value);
+        });
+        
+        // Calculate percentages based on the merged values
+        const totalValue = response.data.total_value;
+        const normalizedSectors = Array.from(sectorMap.entries()).map(([sector, value]) => ({
+          sector,
+          value,
+          percentage: (value / totalValue) * 100
+        }));
+        
         // Sort sectors by value in descending order
-        const sortedSectors = response.data.sectors.sort((a, b) => b.value - a.value);
+        const sortedSectors = normalizedSectors.sort((a, b) => b.value - a.value);
+        
         setData(sortedSectors);
         setFilteredData(sortedSectors);
         setLoading(false);

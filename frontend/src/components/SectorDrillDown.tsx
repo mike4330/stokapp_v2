@@ -46,9 +46,15 @@ interface MPTData {
   sector: string;
 }
 
+// Ensure this matches the mapping in SectorAllocationChart.tsx
 const SECTOR_NAME_MAP: Record<string, string> = {
   'Health Care': 'Healthcare',
   // Add more mappings here if needed
+};
+
+// Function to normalize sector names for consistency
+const normalizeSectorName = (sector: string): string => {
+  return SECTOR_NAME_MAP[sector] || sector;
 };
 
 const COLORS = [
@@ -70,7 +76,7 @@ const SectorDrillDown: React.FC<DrillDownProps> = ({ sector }) => {
   const [error, setError] = useState<string | null>(null);
 
   // Normalize sector name for lookup
-  const normalizedSector = SECTOR_NAME_MAP[sector] || sector;
+  const normalizedSector = normalizeSectorName(sector);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -83,7 +89,7 @@ const SectorDrillDown: React.FC<DrillDownProps> = ({ sector }) => {
 
         // Create a map of symbol to sector from MPT data
         const sectorMap = new Map(
-          mptResponse.data.map(item => [item.symbol, item.sector])
+          mptResponse.data.map(item => [item.symbol, normalizeSectorName(item.sector)])
         );
 
         // Filter holdings by normalized sector and calculate percentages
