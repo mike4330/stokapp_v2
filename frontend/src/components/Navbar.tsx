@@ -159,6 +159,14 @@ const Navbar: React.FC = () => {
                         Dividend History
                       </Link>
                       <Link
+                        to="/dividend-predictions"
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        role="menuitem"
+                        onClick={() => setIsChartsOpen(false)}
+                      >
+                        Dividend Predictions
+                      </Link>
+                      <Link
                         to="/charts/allocation"
                         className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                         role="menuitem"

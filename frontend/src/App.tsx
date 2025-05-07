@@ -21,6 +21,8 @@ import PortfolioVisualization from './pages/PortfolioVisualization';
 import PotentialLots from './pages/PotentialLots';
 import LotManagerPage from './pages/LotManagerPage';
 import AllocationGrid from './pages/AllocationGrid';
+import PortfolioAnalyzer from './pages/PortfolioAnalyzer';
+import DividendPredictions from './pages/DividendPredictions';
 import './App.css';
 
 // Placeholder components for routes
@@ -49,7 +51,9 @@ function App() {
             <Route path="/charts/sunburst" element={<PortfolioVisualization />} />
             <Route path="/charts/dividends" element={<DividendCharts />} />
             <Route path="/charts/allocation" element={<AllocationGrid />} />
+            <Route path="/dividend-predictions" element={<DividendPredictions />} />
             <Route path="/settings/scheduler" element={<SchedulerSettings />} />
+            <Route path="/analyze/:runId" element={<PortfolioAnalyzer />} />
           </Routes>
         </main>
       </div>

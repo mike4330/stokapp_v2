@@ -47,7 +47,7 @@ const PortfolioPerformancePage: React.FC = () => {
   }, []);
 
   return (
-    <div className="container mx-auto px-2 md:px-3 py-6">
+    <div className="py-6">
       <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Portfolio Performance</h1>
       
       {/* 

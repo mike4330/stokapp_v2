@@ -104,21 +104,28 @@ const MPTModelling: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isDebugExpanded, setIsDebugExpanded] = useState(false);
   const [isSectorConstraintsExpanded, setIsSectorConstraintsExpanded] = useState(true);
+  const [dataLatestDate, setDataLatestDate] = useState<string | null>(null);
 
   // Check data file status on component mount
   useEffect(() => {
     const checkDataFileStatus = async () => {
       try {
         setDataStatus('Checking data file status...');
-        // Placeholder for future API call
-        // const response = await fetch('/api/check-data-file');
-        // if (!response.ok) throw new Error('Failed to check data file status');
-        // const data = await response.json();
-        // setDataStatus(data.available ? 'Data file available: pricedataset.csv' : 'Data file not found');
-        // For now, simulate a check
-        setTimeout(() => {
+        
+        // Fetch data file status and latest date
+        const response = await fetch('/api/data-status');
+        
+        if (!response.ok) throw new Error('Failed to check data file status');
+        
+        const data = await response.json();
+        const latestDate = data.latest_date || null;
+        
+        if (latestDate) {
+          setDataLatestDate(latestDate);
+          setDataStatus(`Data file available: pricedataset.csv (latest data: ${latestDate})`);
+        } else {
           setDataStatus('Data file available: pricedataset.csv');
-        }, 1000);
+        }
       } catch (err) {
         setDataStatus('Error checking data file status');
       }
@@ -126,16 +133,20 @@ const MPTModelling: React.FC = () => {
     checkDataFileStatus();
   }, []);
 
-  // Effect to update data status when refresh toggle changes
+  // Update data status when refresh toggle changes
   useEffect(() => {
     if (refreshData) {
       setDataStatus('Data will be refreshed from Yahoo Finance when running the model');
       setIsRefreshing(true);
     } else {
-      setDataStatus('Using existing data from pricedataset.csv');
+      if (dataLatestDate) {
+        setDataStatus(`Using existing data from pricedataset.csv (latest data: ${dataLatestDate})`);
+      } else {
+        setDataStatus('Using existing data from pricedataset.csv');
+      }
       setIsRefreshing(false);
     }
-  }, [refreshData]);
+  }, [refreshData, dataLatestDate]);
 
   const handleSectorConstraintChange = (sector: string, type: 'min' | 'max', value: string) => {
     setSectorConstraints(prev => ({
@@ -209,10 +220,24 @@ const MPTModelling: React.FC = () => {
           setModelingResult(statusData.result);
           setModelingLoading(false);
           clearInterval(interval);
+          
+          // If the data was refreshed, update the latest date
+          if (refreshData && statusData.result?.debug_info?.latest_date) {
+            setDataLatestDate(statusData.result.debug_info.latest_date);
+          }
+          
           if (refreshData) {
-            setDataStatus('Data refreshed from pricedataset.csv');
+            if (dataLatestDate) {
+              setDataStatus(`Data refreshed from pricedataset.csv (latest data: ${dataLatestDate})`);
+            } else {
+              setDataStatus('Data refreshed from pricedataset.csv');
+            }
           } else {
-            setDataStatus('Data file used: pricedataset.csv (not refreshed)');
+            if (dataLatestDate) {
+              setDataStatus(`Data file used: pricedataset.csv (not refreshed, latest data: ${dataLatestDate})`);
+            } else {
+              setDataStatus('Data file used: pricedataset.csv (not refreshed)');
+            }
           }
         } else if (statusData.status === 'failed') {
           setModelingError(statusData.error || 'Task failed');
