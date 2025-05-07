@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 from app.core.config import settings
 from app.api.routes import router as api_router
 from app.api.crudroutes import router as crud_router
+from app.api.dividend_routes import router as dividend_router
 from app.scheduler.config import initialize_scheduler, scheduler, load_job_states, save_job_states
 from .mpt_modeling import (
     initiate_mpt_modeling,
@@ -49,6 +50,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 # Include API routers
 app.include_router(api_router, prefix="/api")
 app.include_router(crud_router, prefix="/api/crud")
+app.include_router(dividend_router, prefix="/api")
 
 class OptimizationRequest(BaseModel):
     gamma: Optional[float] = None

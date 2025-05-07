@@ -7,8 +7,12 @@ from typing import Dict, Any, Optional
 from .portfolio_optimization import run_optimization
 from .model_repository import ModelRepository
 
-# Initialize model repository
-model_repo = ModelRepository()
+# Get the absolute path for model repository
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+repo_path = os.path.join(base_dir, "model_repository")
+
+# Initialize model repository with absolute path
+model_repo = ModelRepository(repo_dir=repo_path)
 
 # In-memory storage for task status and results (for simplicity)
 # In a production environment, consider using SQLite or Redis
