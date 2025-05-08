@@ -36,3 +36,17 @@ code {
     padding-right: 4rem; /* 64px */
   }
 }
+
+/* Custom utility class for standard table cell styling */
+.table-cell-standard {
+  white-space: nowrap;
+  padding: 0.25rem 0.75rem; /* py-1 px-3 */
+  font-size: 0.875rem; /* text-sm */
+  color: #6b7280; /* text-gray-500 */
+}
+
+@media (prefers-color-scheme: dark) {
+  .table-cell-standard {
+    color: #d1d5db; /* dark:text-gray-300 */
+  }
+}

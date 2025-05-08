@@ -54,7 +54,7 @@ const HoldingRow = React.memo(({
   totalValue: number 
 }) => (
   <tr className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-    <td className="whitespace-nowrap py-1 pl-4 pr-3 text-sm font-medium text-gray-900 dark:text-gray-100 sm:pl-6">
+    <td className="table-cell-standard font-medium text-gray-900 dark:text-gray-100 sm:pl-6">
       <Link 
         to={`/positions/${holding.symbol}`}
         className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
@@ -62,13 +62,13 @@ const HoldingRow = React.memo(({
         {holding.symbol}
       </Link>
     </td>
-    <td className="whitespace-nowrap px-3 py-1 text-sm text-gray-500 dark:text-gray-300 font-mono">
+    <td className="table-cell-standard font-mono">
       {holding.units.toFixed(4)}
     </td>
-    <td className="whitespace-nowrap px-3 py-1 text-sm text-gray-500 dark:text-gray-300 font-mono">
+    <td className="table-cell-standard font-mono">
       ${holding.current_price.toFixed(2)}
     </td>
-    <td className="whitespace-nowrap px-3 py-1 text-sm flex justify-center space-x-2">
+    <td className="table-cell-standard flex justify-center space-x-2">
       {holding.ma50 && (
         <PriceIndicator 
           label="MA50" 
@@ -82,7 +82,7 @@ const HoldingRow = React.memo(({
         />
       )}
     </td>
-    <td className="whitespace-nowrap px-3 py-1 text-sm font-mono">
+    <td className="table-cell-standard font-mono">
       <span className={`
         ${holding.price_change_pct && holding.price_change_pct > 0 ? 'text-green-600 dark:text-green-400' : ''}
         ${holding.price_change_pct && holding.price_change_pct < 0 ? 'text-red-600 dark:text-red-400' : ''}
@@ -99,13 +99,13 @@ const HoldingRow = React.memo(({
         ) : 'N/A'}
       </span>
     </td>
-    <td className="whitespace-nowrap px-3 py-1 text-sm text-gray-500 dark:text-gray-300 font-mono">
+    <td className="table-cell-standard font-mono">
       ${holding.position_value.toFixed(2)}
     </td>
-    <td className="whitespace-nowrap px-3 py-1 text-sm text-gray-500 dark:text-gray-300 font-mono">
+    <td className="table-cell-standard font-mono">
       {((holding.position_value / totalValue) * 100).toFixed(2)}%
     </td>
-    <td className="whitespace-nowrap px-3 py-1 text-sm text-gray-500 dark:text-gray-300 font-mono">
+    <td className="table-cell-standard font-mono">
       {holding.overamt?.toFixed(2) || 'N/A'}
     </td>
   </tr>
