@@ -91,7 +91,11 @@ def get_holdings(db: Session = Depends(get_db)):
                 SELECT SUM(CASE
                     WHEN units_remaining IS NULL THEN units
                     ELSE units_remaining
-                END) as net_units
+                END) as net_units,
+                SUM(CASE
+                    WHEN units_remaining IS NULL THEN units * price
+                    ELSE units_remaining * price
+                END) as total_cost
                 FROM transactions
                 WHERE xtype = 'Buy'
                 AND symbol = :symbol
@@ -103,6 +107,7 @@ def get_holdings(db: Session = Depends(get_db)):
                 continue  # Skip if no units
                 
             net_units = float(result[0])  # Convert to float
+            total_cost = float(result[1]) if result[1] is not None else 0  # Convert to float
             
             # Step 3: Get price data - matching your PHP approach
             price_query = text("SELECT price FROM prices WHERE symbol = :symbol")
@@ -169,6 +174,10 @@ def get_holdings(db: Session = Depends(get_db)):
             mpt_result = db.execute(mpt_query, {"symbol": symbol}).fetchone()
             overamt = float(mpt_result[0]) if mpt_result and mpt_result[0] is not None else None
             
+            # Calculate unrealized gain/loss
+            unrealized_gain = position_value - total_cost
+            unrealized_gain_percent = (unrealized_gain / total_cost * 100) if total_cost > 0 else 0
+            
             # Add to results
             holdings.append({
                 "symbol": symbol,
@@ -179,7 +188,9 @@ def get_holdings(db: Session = Depends(get_db)):
                 "ma200": mean200,
                 "overamt": overamt,
                 "price_change": price_change,
-                "price_change_pct": price_change_pct
+                "price_change_pct": price_change_pct,
+                "unrealized_gain": unrealized_gain,
+                "unrealized_gain_percent": unrealized_gain_percent
             })
         
         return holdings
@@ -1307,3 +1318,31 @@ def get_data_status(db: Session = Depends(get_db)):
     except Exception as e:
         logging.error(f"Error in get_data_status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/positions/{symbol}/market-value-history")
+def get_market_value_history(symbol: str, db: Session = Depends(get_db)):
+    """Get historical market value data for a position"""
+    try:
+        query = text("""
+            SELECT 
+                timestamp,
+                CAST(close AS FLOAT) as close,
+                CAST(shares AS FLOAT) as shares,
+                CAST(close AS FLOAT) * CAST(shares AS FLOAT) as market_value
+            FROM security_values
+            WHERE symbol = :symbol
+            ORDER BY timestamp ASC
+        """)
+        result = db.execute(query, {"symbol": symbol})
+        data = [
+            {
+                "timestamp": row[0],
+                "close": row[1],
+                "shares": row[2],
+                "market_value": row[3]
+            }
+            for row in result
+        ]
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve market value history: {str(e)}")

@@ -13,6 +13,7 @@ import PriceHistoryChart from '../components/PriceHistoryChart';
 import { ReturnChart } from '../components/ReturnChart';
 import { useSymbolReturns } from '../hooks/useSymbolReturns';
 import { PositionDetails } from '../components/PositionDetails';
+import MarketValueChart from '../components/MarketValueChart';
 
 interface Position {
   symbol: string;
@@ -192,6 +193,11 @@ const PositionInfo: React.FC = () => {
           </div>
           <ReturnChart data={returnData} isLoading={returnDataLoading} />
         </div>
+
+        {/* Market Value Chart */}
+        <div className="mt-6 mb-6">
+          <MarketValueChart symbol={symbol || ''} />
+        </div>
       </div>
 
       <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
@@ -222,6 +228,7 @@ const PositionInfo: React.FC = () => {
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Units</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Price</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Total</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Unrealized P/L</th>
                   <th scope="col" className="relative px-6 py-3">
                     <span className="sr-only">Edit</span>
                   </th>
@@ -252,6 +259,22 @@ const PositionInfo: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm">${transaction.price.toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       ${(transaction.units * transaction.price).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {transaction.xtype.toLowerCase() === 'buy' && transaction.units_remaining ? (
+                        <span className={`
+                          ${position.unrealized_gain >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}
+                        `}>
+                          {position.unrealized_gain > 0 ? '+' : ''}
+                          ${position.unrealized_gain.toFixed(2)}
+                          <span className="text-xs ml-1">
+                            ({position.unrealized_gain_percent > 0 ? '+' : ''}
+                            {position.unrealized_gain_percent.toFixed(2)}%)
+                          </span>
+                        </span>
+                      ) : (
+                        '-'
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
                       <button 

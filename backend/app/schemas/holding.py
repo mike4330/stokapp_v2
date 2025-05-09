@@ -10,4 +10,6 @@ class Holding(BaseModel):
     ma200: Optional[float] = None
     overamt: Optional[float] = None
     price_change: Optional[float] = None
-    price_change_pct: Optional[float] = None 
+    price_change_pct: Optional[float] = None
+    unrealized_gain: float
+    unrealized_gain_percent: float 
