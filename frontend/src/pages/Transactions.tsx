@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import TransactionForm from '../components/TransactionForm';
 import EditTransactionModal from '../components/EditTransactionModal';
+import styles from './Transactions.module.css';
 
 interface Transaction {
   id: number;
@@ -145,16 +146,16 @@ const Transactions: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600">
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="py-2 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 sm:pl-6">ID</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Date</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Account</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Symbol</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Type</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Status</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Units</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Price</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Total</th>
-                    <th scope="col" className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">P/L</th>
+                    <th scope="col" className={styles['table-header']}>ID</th>
+                    <th scope="col" className={styles['table-header']}>Date</th>
+                    <th scope="col" className={styles['table-header']}>Account</th>
+                    <th scope="col" className={styles['table-header']}>Symbol</th>
+                    <th scope="col" className={styles['table-header']}>Type</th>
+                    <th scope="col" className={styles['table-header']}>Status</th>
+                    <th scope="col" className={styles['table-header']}>Units</th>
+                    <th scope="col" className={styles['table-header']}>Price</th>
+                    <th scope="col" className={styles['table-header']}>Total</th>
+                    <th scope="col" className={styles['table-header']}>P/L</th>
                     <th scope="col" className="relative py-2 pl-3 pr-4 sm:pr-6">
                       <span className="sr-only">Edit</span>
                     </th>
@@ -165,45 +166,41 @@ const Transactions: React.FC = () => {
                     const total = calculateTotal(transaction.units, transaction.price);
                     
                     return (
-                      <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 [&>td]:py-1">
-                        <td className="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium text-gray-900 dark:text-gray-100 sm:pl-6">
+                      <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                        <td className={`${styles['table-cell']} font-medium text-gray-900 dark:text-white`}>
                           {transaction.id}
                         </td>
-                        <td className="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <td className={`${styles['table-cell']} font-medium text-gray-900 dark:text-white`}>
                           {transaction.date_new}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500 dark:text-gray-300">{transaction.acct || '-'}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500 dark:text-gray-300">{transaction.symbol}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-sm">
-                          <span className={`inline-flex rounded-md px-2 text-xs font-semibold leading-5 ${
+                        <td className={styles['table-cell']}>{transaction.acct || '-'}</td>
+                        <td className={styles['table-cell']}>{transaction.symbol}</td>
+                        <td className={styles['table-cell']}>
+                          <span className={`${styles['status-badge']} ${
                             transaction.xtype.toLowerCase() === 'buy' 
-                              ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                              ? styles['status-badge-green']
                               : transaction.xtype.toLowerCase() === 'sell'
-                              ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                              : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                              ? styles['status-badge-red']
+                              : styles['status-badge-blue']
                           }`}>
                             {transaction.xtype}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-sm">
+                        <td className={styles['table-cell']}>
                           {transaction.disposition && (
-                            <span className={`inline-flex rounded-md px-2 text-xs font-semibold leading-5 ${
+                            <span className={`${styles['status-badge']} ${
                               transaction.disposition === 'sold'
-                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                                : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                                ? styles['status-badge-gray']
+                                : styles['status-badge-yellow']
                             }`}>
                               {transaction.disposition}
                             </span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500 dark:text-gray-300">{transaction.units}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500 dark:text-gray-300">
-                          ${transaction.price.toFixed(2)}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500 dark:text-gray-300">
-                          ${total.toFixed(2)}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-sm">
+                        <td className={`${styles['table-cell']} font-mono`}>{transaction.units}</td>
+                        <td className={`${styles['table-cell']} font-mono`}>${transaction.price.toFixed(2)}</td>
+                        <td className={`${styles['table-cell']} font-mono`}>${total.toFixed(2)}</td>
+                        <td className={styles['table-cell']}>
                           {transaction.xtype === 'Sell' && transaction.gain !== null && (
                             <span className={`${
                               transaction.gain >= 0 

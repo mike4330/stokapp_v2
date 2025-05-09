@@ -34,11 +34,30 @@ interface HistoricalDataPoint {
   cost: number;      // Cost basis of portfolio
 }
 
+// Hook to detect Tailwind dark mode
+function useIsDarkMode() {
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const checkDark = () =>
+      setIsDark(document.documentElement.classList.contains('dark'));
+    checkDark();
+    // If you have a custom event for theme change, listen for it
+    // Otherwise, you may want to listen for storage or mutation events if your theme changes dynamically
+    // For most Tailwind setups, a page reload or context will update the class
+    // window.addEventListener('classChange', checkDark);
+    // return () => window.removeEventListener('classChange', checkDark);
+  }, []);
+
+  return isDark;
+}
+
 const PortfolioPerformanceChart: React.FC = () => {
   // State for storing historical portfolio data
   const [historicalData, setHistoricalData] = useState<HistoricalDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const isDark = useIsDarkMode();
 
   // Fetch historical portfolio data on component mount
   useEffect(() => {
@@ -200,7 +219,7 @@ const PortfolioPerformanceChart: React.FC = () => {
                   return value;
                 }
               }}
-              tick={{ fontSize: 11, fill: '#6B7280' }}
+              tick={{ fontSize: 11, fill: isDark ? '#F3F4F6' : '#374151' }}
               padding={{ left: 5, right: 5 }}
               minTickGap={30}
               stroke="#888"
@@ -211,7 +230,7 @@ const PortfolioPerformanceChart: React.FC = () => {
             {/* Y-axis configuration */}
             <YAxis 
               tickFormatter={value => `$${(value / 1000).toFixed(0)}k`} // Format as $XXk
-              tick={{ fontSize: 11, fill: '#6B7280' }}
+              tick={{ fontSize: 11, fill: isDark ? '#F3F4F6' : '#374151' }}
               domain={yDomain} // Custom domain from function
               stroke="#888"
               width={45}

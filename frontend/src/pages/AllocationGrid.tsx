@@ -34,38 +34,56 @@ const AllocationGrid: React.FC = () => {
         return res.json();
       })
       .then((data: Holding[]) => {
-        setSymbols(data.map((h) => h.symbol));
+        const symbolList = data.map((h) => h.symbol);
+        setSymbols(symbolList);
+        
+        // Initialize states for all symbols
+        const initialStates = symbolList.reduce((acc, symbol) => ({
+          ...acc,
+          [symbol]: { data: null, loading: true, error: null }
+        }), {});
+        setSymbolStates(initialStates);
+        
+        // Make a single batch request for all symbols
+        if (symbolList.length > 0) {
+          const symbolsParam = symbolList.join(',');
+          fetch(`/api/weights?symbols=${encodeURIComponent(symbolsParam)}`)
+            .then((res) => {
+              if (!res.ok) throw new Error(`API error: ${res.status}`);
+              return res.json();
+            })
+            .then((dataBySymbol) => {
+              setSymbolStates((prev) => {
+                const newStates = { ...prev };
+                Object.entries(dataBySymbol).forEach(([symbol, data]) => {
+                  newStates[symbol] = {
+                    data: data as WeightDataPoint[],
+                    loading: false,
+                    error: null
+                  };
+                });
+                return newStates;
+              });
+            })
+            .catch((err) => {
+              setSymbolStates((prev) => {
+                const newStates = { ...prev };
+                Object.keys(prev).forEach((symbol) => {
+                  newStates[symbol] = {
+                    data: null,
+                    loading: false,
+                    error: err.message
+                  };
+                });
+                return newStates;
+              });
+            });
+        }
       })
       .catch((err) => {
         // Optionally handle error for symbol list
       });
   }, []);
-
-  useEffect(() => {
-    symbols.forEach((symbol) => {
-      setSymbolStates((prev) => ({
-        ...prev,
-        [symbol]: { data: null, loading: true, error: null },
-      }));
-      fetch(`/api/weights?symbol=${encodeURIComponent(symbol)}`)
-        .then((res) => {
-          if (!res.ok) throw new Error(`API error: ${res.status}`);
-          return res.json();
-        })
-        .then((json) => {
-          setSymbolStates((prev) => ({
-            ...prev,
-            [symbol]: { data: json, loading: false, error: null },
-          }));
-        })
-        .catch((err) => {
-          setSymbolStates((prev) => ({
-            ...prev,
-            [symbol]: { data: null, loading: false, error: err.message },
-          }));
-        });
-    });
-  }, [symbols]);
 
   return (
     <div className="p-6">

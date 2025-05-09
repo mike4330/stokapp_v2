@@ -67,7 +67,7 @@ export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading }) => 
               tick={{ fontSize: 11 }}
             />
             <YAxis
-              tickFormatter={(value) => `${value.toFixed(2)}%`}
+              tickFormatter={(value) => `${value.toFixed(1)}%`}
               stroke="#9CA3AF"
               tick={{ fontSize: 11 }}
             />

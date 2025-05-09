@@ -51,19 +51,20 @@ const SECTOR_NAME_MAP: Record<string, string> = {
   // Add more mappings here if needed
 };
 
+const alpha = 0.5;  // Set your alpha value here
 const COLORS = [
-  'rgba(0, 136, 254, 0.7)',    // Blue
-  'rgba(0, 196, 159, 0.7)',    // Teal
-  'rgba(255, 187, 40, 0.7)',   // Amber
-  'rgba(255, 128, 66, 0.7)',   // Orange
-  'rgba(136, 132, 216, 0.7)',  // Purple
-  'rgba(236, 72, 153, 0.7)',   // Pink
-  'rgba(52, 211, 153, 0.7)',   // Emerald
-  'rgba(251, 146, 60, 0.7)',   // Orange
-  'rgba(124, 58, 237, 0.7)',   // Violet
-  'rgba(239, 68, 68, 0.7)',    // Red
-  'rgba(16, 185, 129, 0.7)',   // Green
-  'rgba(59, 130, 246, 0.7)'    // Light Blue
+  `rgba(2, 138, 255, ${alpha})`,    // Blue
+  `rgba(2, 198, 161, ${alpha})`,    // Teal
+  `rgba(255, 187, 40, ${alpha})`,   // Amber
+  `rgba(255, 128, 66, ${alpha})`,   // Orange
+  `rgba(136, 132, 216, ${alpha})`,  // Purple
+  `rgba(236, 72, 153, ${alpha})`,   // Pink
+  `rgba(52, 211, 153, ${alpha})`,   // Emerald
+  `rgba(251, 146, 60, ${alpha})`,   // Orange
+  `rgba(124, 58, 237, ${alpha})`,   // Violet
+  `rgba(239, 68, 68, ${alpha})`,    // Red
+  `rgba(16, 185, 129, ${alpha})`,   // Green
+  `rgba(59, 130, 246, ${alpha})`    // Light Blue
 ];
 
 const SectorAllocationChart: React.FC = () => {
@@ -256,9 +257,9 @@ const SectorAllocationChart: React.FC = () => {
             }}
           >
             <CartesianGrid 
-              strokeDasharray="3 3" 
+              //strokeDasharray="3 3" 
               stroke="#374151"  // dark:border-gray-700
-              strokeOpacity={0.4} 
+              strokeOpacity={0.5} 
               vertical={false}
               horizontal={true}
             />
@@ -275,7 +276,9 @@ const SectorAllocationChart: React.FC = () => {
               axisLine={{ stroke: '#374151', strokeWidth: 1 }}  // dark:border-gray-700
             />
             <YAxis
-              tickFormatter={(value) => `${value.toFixed(2)}%`}
+              tickFormatter={(value) => `${value.toFixed(1)}%`}
+              tickCount={13} 
+              //interval={0}
               tick={{ 
                 fontSize: 11,
                 fill: '#9CA3AF'  // text-gray-400

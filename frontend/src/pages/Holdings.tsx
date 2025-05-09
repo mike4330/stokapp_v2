@@ -19,9 +19,11 @@ interface Holding {
   overamt: number | null;
   price_change: number | null;
   price_change_pct: number | null;
+  unrealized_gain: number;
+  unrealized_gain_percent: number;
 }
 
-type SortColumn = 'symbol' | 'units' | 'position_value' | 'portfolio_percent' | 'overamt' | 'price_change_pct';
+type SortColumn = 'symbol' | 'units' | 'position_value' | 'portfolio_percent' | 'overamt' | 'price_change_pct' | 'unrealized_pl';
 type SortDirection = 'asc' | 'desc';
 
 // Memoized indicator component to prevent unnecessary re-renders
@@ -107,6 +109,24 @@ const HoldingRow = React.memo(({
     </td>
     <td className="table-cell-standard font-mono">
       {holding.overamt?.toFixed(2) || 'N/A'}
+    </td>
+    <td className="table-cell-standard font-mono">
+      {holding.unrealized_gain !== undefined && holding.unrealized_gain !== null ? (
+        <span className={`
+          ${holding.unrealized_gain >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}
+        `}>
+          {holding.unrealized_gain > 0 ? '+' : ''}
+          ${holding.unrealized_gain.toFixed(2)}
+          {holding.unrealized_gain_percent !== undefined && holding.unrealized_gain_percent !== null && (
+            <span className="text-xs ml-1">
+              ({holding.unrealized_gain_percent > 0 ? '+' : ''}
+              {holding.unrealized_gain_percent.toFixed(2)}%)
+            </span>
+          )}
+        </span>
+      ) : (
+        'N/A'
+      )}
     </td>
   </tr>
 ));
@@ -223,6 +243,9 @@ const Holdings: React.FC = () => {
         case 'price_change_pct':
           comparison = (a.price_change_pct || 0) - (b.price_change_pct || 0);
           break;
+        case 'unrealized_pl':
+          comparison = (a.unrealized_gain || 0) - (b.unrealized_gain || 0);
+          break;
       }
       return sortDirection === 'asc' ? comparison : -comparison;
     });
@@ -326,6 +349,13 @@ const Holdings: React.FC = () => {
                     <SortHeader 
                       label="Overamt" 
                       column="overamt" 
+                      currentSort={sortColumn}
+                      currentDirection={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortHeader 
+                      label="P/L" 
+                      column="unrealized_pl" 
                       currentSort={sortColumn}
                       currentDirection={sortDirection}
                       onSort={handleSort}
