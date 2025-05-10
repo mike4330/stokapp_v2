@@ -165,7 +165,7 @@ const DividendPredictions: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {monthlyPredictions.map(([symbol, prediction]) => (
                 <div key={symbol} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                  <div className="bg-gray-100 dark:bg-gray-700 px-3 py-2">
+                  <div className="bg-gray-100 dark:bg-gray-700 px-3 py-1">
                     <h3 className="font-medium text-gray-800 dark:text-gray-200">{symbol}</h3>
                   </div>
                   <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -199,7 +199,7 @@ const DividendPredictions: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {quarterlyPredictions.map(([symbol, prediction]) => (
                 <div key={symbol} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                  <div className="bg-gray-100 dark:bg-gray-700 px-3 py-2">
+                  <div className="bg-gray-100 dark:bg-gray-700 px-3 py-1">
                     <h3 className="font-medium text-gray-800 dark:text-gray-200">{symbol}</h3>
                   </div>
                   <div className="divide-y divide-gray-200 dark:divide-gray-700">

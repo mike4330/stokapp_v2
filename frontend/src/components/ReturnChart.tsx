@@ -32,9 +32,10 @@ interface ReturnData {
 interface ReturnChartProps {
   data: ReturnData[];
   isLoading: boolean;
+  symbol: string;
 }
 
-export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading }) => {
+export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading, symbol }) => {
   if (isLoading) {
     return (
       <div className="bg-gray-900/50 rounded-lg p-6 h-[400px]">
@@ -47,7 +48,7 @@ export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading }) => 
 
   return (
     <div className="bg-gray-900/50 rounded-lg p-6 h-[400px]">
-      <h2 className="text-lg font-semibold mb-4 text-white">Return Over Time</h2>
+      <h2 className="text-lg font-semibold mb-4 text-white">{symbol}: Return Over Time</h2>
       <div className="h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
@@ -87,6 +88,9 @@ export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading }) => 
               dataKey="return_percent"
               stroke="#60A5FA"
               dot={false}
+              isAnimationActive={true}
+              animationDuration={300}
+              animationBegin={0}
             />
           </LineChart>
         </ResponsiveContainer>

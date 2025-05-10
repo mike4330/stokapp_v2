@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import EditTransactionModal from '../components/EditTransactionModal';
 import PriceHistoryChart from '../components/PriceHistoryChart';
@@ -48,7 +48,10 @@ interface Transaction {
 
 const PositionInfo: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
+  const navigate = useNavigate();
   const [position, setPosition] = useState<Position | null>(null);
+  const [allPositions, setAllPositions] = useState<Position[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,9 +63,10 @@ const PositionInfo: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [positionResponse, transactionsResponse] = await Promise.all([
+        const [positionResponse, transactionsResponse, allPositionsResponse] = await Promise.all([
           axios.get(`/api/positions/${symbol}`),
-          axios.get(`/api/positions/${symbol}/transactions`)
+          axios.get(`/api/positions/${symbol}/transactions`),
+          axios.get('/api/holdings')
         ]);
         
         setPosition(positionResponse.data);
@@ -73,6 +77,13 @@ const PositionInfo: React.FC = () => {
           acct: t.account
         }));
         setTransactions(transformedTransactions);
+        
+        // Set all positions and find current index
+        const positions = allPositionsResponse.data;
+        setAllPositions(positions);
+        const index = positions.findIndex((p: Position) => p.symbol === symbol);
+        setCurrentIndex(index >= 0 ? index : 0);
+        
         setError(null);
       } catch (err) {
         setError('Failed to load position data');
@@ -84,6 +95,26 @@ const PositionInfo: React.FC = () => {
 
     fetchData();
   }, [symbol]);
+
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Only handle if not typing in an input or textarea
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (event.key.toLowerCase() === 'a') {
+        handleNavigate('prev');
+      } else if (event.key.toLowerCase() === 'z') {
+        handleNavigate('next');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [currentIndex, allPositions]); // Add dependencies to ensure we have latest state
 
   const handleEditClick = (transaction: Transaction) => {
     if (!symbol) return; // Guard against undefined symbol
@@ -111,6 +142,16 @@ const PositionInfo: React.FC = () => {
       setTransactions(transformedTransactions);
     } catch (err) {
       console.error('Failed to refresh transactions:', err);
+    }
+  };
+
+  const handleNavigate = (direction: 'next' | 'prev') => {
+    if (direction === 'next' && currentIndex < allPositions.length - 1) {
+      const nextSymbol = allPositions[currentIndex + 1].symbol;
+      navigate(`/positions/${nextSymbol}`);
+    } else if (direction === 'prev' && currentIndex > 0) {
+      const prevSymbol = allPositions[currentIndex - 1].symbol;
+      navigate(`/positions/${prevSymbol}`);
     }
   };
 
@@ -165,7 +206,12 @@ const PositionInfo: React.FC = () => {
         >
           <div className="bg-gray-900/50 p-6 rounded-lg">
             <h2 className="text-lg font-semibold mb-4 text-white">Position Details</h2>
-            <PositionDetails position={position} />
+            <PositionDetails 
+              position={position} 
+              currentIndex={currentIndex}
+              totalPositions={allPositions.length}
+              onNavigate={handleNavigate}
+            />
           </div>
 
           <div className="bg-gray-900/50 p-6 rounded-lg">
@@ -191,7 +237,7 @@ const PositionInfo: React.FC = () => {
           <div className="h-[400px]">
             <PriceHistoryChart symbol={symbol || ''} />
           </div>
-          <ReturnChart data={returnData} isLoading={returnDataLoading} />
+          <ReturnChart data={returnData} isLoading={returnDataLoading} symbol={symbol || ''} />
         </div>
 
         {/* Market Value Chart */}
