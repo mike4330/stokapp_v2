@@ -146,7 +146,7 @@ const MarketValueChart: React.FC<MarketValueChartProps> = ({ symbol }) => {
   return (
     <div className="h-[400px] bg-gray-900/50 p-6 rounded-lg">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-white">Position Market Value History</h2>
+        <h2 className="text-lg font-semibold text-white">{symbol}: Position Market Value History</h2>
         <div className="flex space-x-2">
           {(['6M', '1Y', '2Y', 'ALL'] as TimeFrame[]).map((tf) => (
             <button

@@ -10,6 +10,7 @@
  * 
  * Displays detailed information for a single investment position, including
  * current value, cost basis, unrealized gains/losses, and performance metrics.
+ * Includes navigation controls to move between different holdings.
  */
 
 import React from 'react';
@@ -28,14 +29,50 @@ interface Position {
 
 interface PositionDetailsProps {
   position: Position;
+  currentIndex: number;
+  totalPositions: number;
+  onNavigate: (direction: 'next' | 'prev') => void;
 }
 
-export const PositionDetails: React.FC<PositionDetailsProps> = ({ position }) => {
+export const PositionDetails: React.FC<PositionDetailsProps> = ({ 
+  position, 
+  currentIndex, 
+  totalPositions,
+  onNavigate 
+}) => {
   const totalReturn = position.unrealized_gain + position.realized_pl + position.total_dividends;
   const totalReturnPercent = (totalReturn / (position.cost_basis * position.units)) * 100;
 
   return (
     <div>
+      <div className="flex justify-between items-center mb-4">
+        <button
+          onClick={() => onNavigate('prev')}
+          disabled={currentIndex === 0}
+          className={`px-4 py-2 rounded-lg ${
+            currentIndex === 0 
+              ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          Previous <span className="text-xs ml-1 opacity-75">(A)</span>
+        </button>
+        <div className="text-gray-400">
+          {currentIndex + 1} of {totalPositions}
+        </div>
+        <button
+          onClick={() => onNavigate('next')}
+          disabled={currentIndex === totalPositions - 1}
+          className={`px-4 py-2 rounded-lg ${
+            currentIndex === totalPositions - 1 
+              ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          Next <span className="text-xs ml-1 opacity-75">(Z)</span>
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-2 border border-gray-700 rounded-lg p-4">
         {/* Left Column - Labels */}
         <div className="space-y-1 border-r border-gray-700 pr-2">

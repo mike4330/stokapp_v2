@@ -118,7 +118,7 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ symbol }) => {
   if (error) {
     return (
       <div className="bg-gray-900/50 p-4 rounded-lg">
-        <h2 className="text-base font-semibold mb-2 text-white">Price History</h2>
+        <h2 className="text-base font-semibold mb-2 text-white">{symbol}: Price History</h2>
         <div className="text-red-400">{error}</div>
       </div>
     );
@@ -127,7 +127,7 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ symbol }) => {
   if (priceData.length === 0) {
     return (
       <div className="bg-gray-900/50 p-4 rounded-lg">
-        <h2 className="text-base font-semibold mb-2 text-white">Price History</h2>
+        <h2 className="text-base font-semibold mb-2 text-white">{symbol}: Price History</h2>
         <div className="text-gray-400">No price history data available</div>
       </div>
     );
