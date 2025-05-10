@@ -4,14 +4,43 @@ A modern web application for managing investment portfolios, tracking transactio
 
 ## Features
 
+### Portfolio Management
 - Real-time portfolio tracking and performance visualization
-- Transaction management with lot tracking
-- Sector allocation analysis
-- Price history charts with technical indicators
-- Position-level drill-down analysis
+- Detailed position-level analysis and drill-down capabilities
+- Transaction management with lot tracking and editing
+- Sector allocation analysis with interactive drill-down
+- Portfolio visualization with multiple chart types
 - Dark/light mode support
 - Responsive design
+
+### Analysis Tools
+- Price history charts with technical indicators
+- Portfolio performance analysis with multiple metrics
+- Modern Portfolio Theory (MPT) modeling
+- Results explorer for in-depth analysis
+- Dividend predictions and analysis
+- Buy recommendations based on portfolio analysis
+
+### Transaction Management
+- Comprehensive transaction tracking
+- Lot management system
+- Potential lots analysis
+- Transaction editing capabilities
+- Position details and history
+
+### Charts and Visualizations
+- Return charts
+- Market value charts
+- Sector allocation charts
+- Portfolio performance charts
+- Symbol weight distribution
+- Price history visualization
+
+### Automation
 - Automated background tasks via scheduler
+- Real-time portfolio updates
+- Automated price updates
+- Customizable scheduler settings
 
 ## Technology Stack
 
