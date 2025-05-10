@@ -205,7 +205,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
                         value={formData.units}
                         onChange={handleInputChange}
                         step="any"
-                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
+                        className="mt-1 pt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
                         required
                     />
                 </div>
@@ -217,7 +217,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
                         value={formData.price}
                         onChange={handleInputChange}
                         step="any"
-                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
+                        className="mt-1 pt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
                         required
                     />
                 </div>

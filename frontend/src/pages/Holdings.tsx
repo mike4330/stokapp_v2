@@ -284,10 +284,20 @@ const Holdings: React.FC = () => {
       {/* Portfolio Summary - No changes needed here */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Portfolio Value</h3>
-          <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-            ${totalValue.toFixed(2)}
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Portfolio Value</h3>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                ${totalValue.toFixed(2)}
+              </p>
+            </div>
+            <Link 
+              to="/portfolio-details"
+              className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
+            >
+              View Details →
+            </Link>
+          </div>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
           <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Number of Holdings</h3>

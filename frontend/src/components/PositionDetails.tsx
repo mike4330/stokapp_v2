@@ -38,7 +38,7 @@ export const PositionDetails: React.FC<PositionDetailsProps> = ({ position }) =>
     <div>
       <div className="grid grid-cols-2 gap-2 border border-gray-700 rounded-lg p-4">
         {/* Left Column - Labels */}
-        <div className="space-y-2 border-r border-gray-700 pr-2">
+        <div className="space-y-1 border-r border-gray-700 pr-2">
           <div className="text-left text-gray-400 whitespace-nowrap">Units:</div>
           <div className="text-left text-gray-400 whitespace-nowrap">Current Price:</div>
           <div className="text-left text-gray-400 whitespace-nowrap">Position Value:</div>
@@ -50,34 +50,34 @@ export const PositionDetails: React.FC<PositionDetailsProps> = ({ position }) =>
         </div>
 
         {/* Right Column - Values */}
-        <div className="space-y-2 pl-2">
-          <div className="text-left whitespace-nowrap">{position.units.toLocaleString()}</div>
+        <div className="space-y-1 pl-2">
+          <div className="text-left whitespace-nowrap font-mono">{position.units.toLocaleString()}</div>
           
-          <div className="text-left whitespace-nowrap">
+          <div className="text-left whitespace-nowrap font-mono">
             ${position.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           
-          <div className="text-left whitespace-nowrap">
+          <div className="text-left whitespace-nowrap font-mono">
             ${position.position_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           
-          <div className="text-left whitespace-nowrap">
+          <div className="text-left whitespace-nowrap font-mono">
             ${position.cost_basis.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           
-          <div className={`text-left whitespace-nowrap ${totalReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className={`text-left whitespace-nowrap font-mono ${totalReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             ${totalReturn.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({totalReturnPercent.toFixed(2)}%)
           </div>
           
-          <div className={`text-left whitespace-nowrap ${position.unrealized_gain >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className={`text-left whitespace-nowrap font-mono ${position.unrealized_gain >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             ${position.unrealized_gain.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({position.unrealized_gain_percent.toFixed(2)}%)
           </div>
           
-          <div className={`text-left whitespace-nowrap ${position.realized_pl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className={`text-left whitespace-nowrap font-mono ${position.realized_pl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             ${position.realized_pl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           
-          <div className="text-left text-green-400 whitespace-nowrap">
+          <div className="text-left font-mono text-green-400 whitespace-nowrap">
             ${position.total_dividends.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>

@@ -79,7 +79,7 @@ def get_mpt_data(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT data: {str(e)}")
 
 @router.get("/holdings", response_model=List[Holding])
-def get_holdings(db: Session = Depends(get_db)):
+def get_holdings(group_by_account: bool = False, db: Session = Depends(get_db)):
     try:
         # Step 1: Get all symbols - directly matching the PHP approach
         symbol_query = text("SELECT DISTINCT symbol FROM prices ORDER BY symbol")
@@ -87,28 +87,52 @@ def get_holdings(db: Session = Depends(get_db)):
         
         holdings = []
         for symbol in symbols:
-            # Step 2: Get net units for this symbol
-            units_query = text("""
-                SELECT SUM(CASE
-                    WHEN units_remaining IS NULL THEN units
-                    ELSE units_remaining
-                END) as net_units,
-                SUM(CASE
-                    WHEN units_remaining IS NULL THEN units * price
-                    ELSE units_remaining * price
-                END) as total_cost
-                FROM transactions
-                WHERE xtype = 'Buy'
-                AND symbol = :symbol
-                AND disposition IS NULL
-            """)
-            result = db.execute(units_query, {"symbol": symbol}).fetchone()
-            
-            if not result or result[0] is None or result[0] <= 0:
-                continue  # Skip if no units
+            if group_by_account:
+                # Step 2: Get net units for this symbol by account
+                units_query = text("""
+                    SELECT acct, 
+                           SUM(CASE
+                               WHEN units_remaining IS NULL THEN units
+                               ELSE units_remaining
+                           END) as net_units,
+                           SUM(CASE
+                               WHEN units_remaining IS NULL THEN units * price
+                               ELSE units_remaining * price
+                           END) as total_cost
+                    FROM transactions
+                    WHERE xtype = 'Buy'
+                    AND symbol = :symbol
+                    AND disposition IS NULL
+                    GROUP BY acct
+                """)
+                print(f"Executing query for {symbol} with group_by_account=true: {units_query}")
+                units_results = db.execute(units_query, {"symbol": symbol}).fetchall()
                 
-            net_units = float(result[0])  # Convert to float
-            total_cost = float(result[1]) if result[1] is not None else 0  # Convert to float
+                if not units_results or all(result[1] is None or result[1] <= 0 for result in units_results):
+                    continue  # Skip if no units
+            else:
+                # Step 2: Get net units for this symbol
+                units_query = text("""
+                    SELECT SUM(CASE
+                        WHEN units_remaining IS NULL THEN units
+                        ELSE units_remaining
+                    END) as net_units,
+                    SUM(CASE
+                        WHEN units_remaining IS NULL THEN units * price
+                        ELSE units_remaining * price
+                    END) as total_cost
+                    FROM transactions
+                    WHERE xtype = 'Buy'
+                    AND symbol = :symbol
+                    AND disposition IS NULL
+                """)
+                print(f"Executing query for {symbol} with group_by_account=false: {units_query}")
+                result = db.execute(units_query, {"symbol": symbol}).fetchone()
+                
+                if not result or result[0] is None or result[0] <= 0:
+                    continue  # Skip if no units
+                    
+                units_results = [(None, result[0], result[1])]
             
             # Step 3: Get price data - matching your PHP approach
             price_query = text("SELECT price FROM prices WHERE symbol = :symbol")
@@ -119,80 +143,88 @@ def get_holdings(db: Session = Depends(get_db)):
                 
             current_price = float(price_result[0])  # Convert to float
             
-            # Step 4: Calculate position value
-            position_value = net_units * current_price
-            
-            # Step 5: Get technical indicators
-            indicators_query = text("SELECT mean50, mean200 FROM prices WHERE symbol = :symbol")
-            indicators_result = db.execute(indicators_query, {"symbol": symbol}).fetchone()
-            mean50 = float(indicators_result[0]) if indicators_result and indicators_result[0] is not None else None
-            mean200 = float(indicators_result[1]) if indicators_result and indicators_result[1] is not None else None
-            
-            # Step 6: Get previous close for price change calculation
-            prev_close_query = text("""
-                SELECT close
-                FROM security_values
-                WHERE symbol = :symbol
-                ORDER BY timestamp DESC
-                LIMIT 1
-            """)
-            prev_close_result = db.execute(prev_close_query, {"symbol": symbol}).fetchone()
-            
-            # Make sure to convert to float and handle None values
-            if prev_close_result and prev_close_result[0] is not None:
-                last_close = float(prev_close_result[0])
-            else:
-                last_close = current_price
-            
-            # Set price changes based on symbol and time conditions
-            # Matching the PHP logic for specific symbols and time of day
-            if symbol in ["ETHUSD", "BTCUSD", "XAG"]:
-                # For these specific symbols, set changes to 0 as in the PHP code
-                price_change = 0
-                price_change_pct = 0
-            else:
-                # For regular stocks, calculate normally
-                price_change = current_price - last_close
-                price_change_pct = (price_change / last_close) * 100 if last_close else 0
+            for acct, net_units, total_cost in units_results:
+                net_units = float(net_units) if net_units is not None else 0  # Convert to float
+                total_cost = float(total_cost) if total_cost is not None else 0  # Convert to float
                 
-                # Set to 0 outside market hours if needed (similar to your PHP logic)
-                # You may need to adjust this based on your specific requirements
-                from datetime import datetime, time
-                import pytz
+                if net_units <= 0:
+                    continue
                 
-                est_tz = pytz.timezone('US/Eastern')
-                current_time = datetime.now(est_tz).time()
-                market_open = time(9, 30)  # 9:30 AM ET
-                market_close = time(16, 0)  # 4:00 PM ET
+                # Step 4: Calculate position value
+                position_value = net_units * current_price
                 
-                # If outside market hours and it's a regular stock, set change to 0
-                if not (market_open <= current_time <= market_close):
+                # Step 5: Get technical indicators
+                indicators_query = text("SELECT mean50, mean200 FROM prices WHERE symbol = :symbol")
+                indicators_result = db.execute(indicators_query, {"symbol": symbol}).fetchone()
+                mean50 = float(indicators_result[0]) if indicators_result and indicators_result[0] is not None else None
+                mean200 = float(indicators_result[1]) if indicators_result and indicators_result[1] is not None else None
+                
+                # Step 6: Get previous close for price change calculation
+                prev_close_query = text("""
+                    SELECT close
+                    FROM security_values
+                    WHERE symbol = :symbol
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                """)
+                prev_close_result = db.execute(prev_close_query, {"symbol": symbol}).fetchone()
+                
+                # Make sure to convert to float and handle None values
+                if prev_close_result and prev_close_result[0] is not None:
+                    last_close = float(prev_close_result[0])
+                else:
+                    last_close = current_price
+                
+                # Set price changes based on symbol and time conditions
+                # Matching the PHP logic for specific symbols and time of day
+                if symbol in ["ETHUSD", "BTCUSD", "XAG"]:
+                    # For these specific symbols, set changes to 0 as in the PHP code
                     price_change = 0
                     price_change_pct = 0
-            
-            # Step 7: Get MPT data (overamt)
-            mpt_query = text("SELECT overamt FROM MPT WHERE symbol = :symbol")
-            mpt_result = db.execute(mpt_query, {"symbol": symbol}).fetchone()
-            overamt = float(mpt_result[0]) if mpt_result and mpt_result[0] is not None else None
-            
-            # Calculate unrealized gain/loss
-            unrealized_gain = position_value - total_cost
-            unrealized_gain_percent = (unrealized_gain / total_cost * 100) if total_cost > 0 else 0
-            
-            # Add to results
-            holdings.append({
-                "symbol": symbol,
-                "units": net_units,
-                "current_price": current_price,
-                "position_value": position_value,
-                "ma50": mean50,
-                "ma200": mean200,
-                "overamt": overamt,
-                "price_change": price_change,
-                "price_change_pct": price_change_pct,
-                "unrealized_gain": unrealized_gain,
-                "unrealized_gain_percent": unrealized_gain_percent
-            })
+                else:
+                    # For regular stocks, calculate normally
+                    price_change = current_price - last_close
+                    price_change_pct = (price_change / last_close) * 100 if last_close else 0
+                    
+                    # Set to 0 outside market hours if needed (similar to your PHP logic)
+                    # You may need to adjust this based on your specific requirements
+                    from datetime import datetime, time
+                    import pytz
+                    
+                    est_tz = pytz.timezone('US/Eastern')
+                    current_time = datetime.now(est_tz).time()
+                    market_open = time(9, 30)  # 9:30 AM ET
+                    market_close = time(16, 0)  # 4:00 PM ET
+                    
+                    # If outside market hours and it's a regular stock, set change to 0
+                    if not (market_open <= current_time <= market_close):
+                        price_change = 0
+                        price_change_pct = 0
+                
+                # Step 7: Get MPT data (overamt)
+                mpt_query = text("SELECT overamt FROM MPT WHERE symbol = :symbol")
+                mpt_result = db.execute(mpt_query, {"symbol": symbol}).fetchone()
+                overamt = float(mpt_result[0]) if mpt_result and mpt_result[0] is not None else None
+                
+                # Calculate unrealized gain/loss
+                unrealized_gain = position_value - total_cost
+                unrealized_gain_percent = (unrealized_gain / total_cost * 100) if total_cost > 0 else 0
+                
+                # Add to results
+                holdings.append({
+                    "symbol": symbol,
+                    "units": net_units,
+                    "current_price": current_price,
+                    "position_value": position_value,
+                    "ma50": mean50,
+                    "ma200": mean200,
+                    "overamt": overamt,
+                    "price_change": price_change,
+                    "price_change_pct": price_change_pct,
+                    "unrealized_gain": unrealized_gain,
+                    "unrealized_gain_percent": unrealized_gain_percent,
+                    "acct": acct if acct else "Unknown"
+                })
         
         return holdings
     except Exception as e:

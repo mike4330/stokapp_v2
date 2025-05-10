@@ -12,4 +12,5 @@ class Holding(BaseModel):
     price_change: Optional[float] = None
     price_change_pct: Optional[float] = None
     unrealized_gain: float
-    unrealized_gain_percent: float 
+    unrealized_gain_percent: float
+    acct: Optional[str] = None 

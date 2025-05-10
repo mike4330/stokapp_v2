@@ -23,6 +23,7 @@ import LotManagerPage from './pages/LotManagerPage';
 import AllocationGrid from './pages/AllocationGrid';
 import PortfolioAnalyzer from './pages/PortfolioAnalyzer';
 import DividendPredictions from './pages/DividendPredictions';
+import PortfolioDetails from './pages/PortfolioDetails';
 import './App.css';
 
 // Placeholder components for routes
@@ -40,6 +41,7 @@ function App() {
             <Route path="/" element={<Holdings />} />
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/holdings" element={<Holdings />} />
+            <Route path="/portfolio-details" element={<PortfolioDetails />} />
             <Route path="/positions/:symbol" element={<PositionInfo />} />
             <Route path="/modelling/mpt" element={<MPTModelling />} />
             <Route path="/modelling/results-explorer" element={<ResultsExplorer />} />
