@@ -84,3 +84,20 @@ def get_symbol_transactions(symbol: str, db: Session = Depends(get_db)):
 def test_route():
     """Test endpoint to verify the router is working"""
     return {"message": "CRUD routes are working!"} 
+
+@router.get("/symbols/search")
+def search_symbols(q: str = "", db: Session = Depends(get_db)):
+    """Search for symbols"""
+    try:
+        query = text("""
+            SELECT DISTINCT symbol 
+            FROM prices 
+            WHERE UPPER(symbol) LIKE UPPER(:query)
+            ORDER BY symbol
+            LIMIT 10
+        """)
+        result = db.execute(query, {"query": f"%{q}%"})
+        symbols = [row[0] for row in result]
+        return symbols
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to search symbols: {str(e)}")

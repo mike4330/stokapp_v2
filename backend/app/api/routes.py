@@ -544,22 +544,7 @@ def get_accounts():
     """Get list of all accounts"""
     return ["FID", "FIDRI", "TT"]
 
-@router.get("/symbols/search")
-def search_symbols(q: str = "", db: Session = Depends(get_db)):
-    """Search for symbols"""
-    try:
-        query = text("""
-            SELECT DISTINCT symbol 
-            FROM prices 
-            WHERE UPPER(symbol) LIKE UPPER(:query)
-            ORDER BY symbol
-            LIMIT 10
-        """)
-        result = db.execute(query, {"query": f"%{q}%"})
-        symbols = [row[0] for row in result]
-        return symbols
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to search symbols: {str(e)}")
+
 
 @router.post("/transactions")
 def create_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
@@ -1445,3 +1430,37 @@ def get_market_value_history(symbol: str, db: Session = Depends(get_db)):
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve market value history: {str(e)}")
+
+@router.get("/charts/cumulative-dividends")
+def get_cumulative_dividends(db: Session = Depends(get_db)):
+    """Get the latest cumulative dividends by symbol from security_values."""
+    query = text("""
+        SELECT symbol, cum_divs
+        FROM security_values
+        WHERE (symbol, timestamp) IN (
+            SELECT symbol, MAX(timestamp)
+            FROM security_values
+            GROUP BY symbol
+        )
+        AND cum_divs IS NOT NULL
+        ORDER BY cum_divs DESC
+    """)
+    result = db.execute(query)
+    return [{"symbol": row[0], "value": row[1]} for row in result]
+
+@router.get("/charts/cumulative-realized-gains")
+def get_cumulative_realized_gains(db: Session = Depends(get_db)):
+    """Get the latest cumulative realized gains by symbol from security_values."""
+    query = text("""
+        SELECT symbol, cum_real_gl
+        FROM security_values
+        WHERE (symbol, timestamp) IN (
+            SELECT symbol, MAX(timestamp)
+            FROM security_values
+            GROUP BY symbol
+        )
+        AND cum_real_gl IS NOT NULL
+        ORDER BY cum_real_gl
+    """)
+    result = db.execute(query)
+    return [{"symbol": row[0], "value": row[1]} for row in result]

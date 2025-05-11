@@ -123,6 +123,38 @@ const ButtonizedNavbar: React.FC = () => {
                 <div className="absolute left-0 top-full mt-2 w-56 rounded-lg shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 z-10">
                   <div className="py-1" role="menu" aria-orientation="vertical">
                     <Link
+                      to="/charts/allocation"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsChartsOpen(false)}
+                    >
+                      Allocation Grid
+                    </Link>
+                    <Link
+                      to="/charts/dividends"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsChartsOpen(false)}
+                    >
+                      Dividend History
+                    </Link>
+                    <Link
+                      to="/dividend-predictions"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsChartsOpen(false)}
+                    >
+                      Dividend Predictions
+                    </Link>
+                    <Link
+                      to="/charts/income"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsChartsOpen(false)}
+                    >
+                      Income
+                    </Link>
+                    <Link
                       to="/charts/portfolio"
                       className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
                       role="menuitem"
@@ -145,30 +177,6 @@ const ButtonizedNavbar: React.FC = () => {
                       onClick={() => setIsChartsOpen(false)}
                     >
                       Portfolio Sunburst
-                    </Link>
-                    <Link
-                      to="/charts/dividends"
-                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
-                      role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
-                    >
-                      Dividend History
-                    </Link>
-                    <Link
-                      to="/dividend-predictions"
-                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
-                      role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
-                    >
-                      Dividend Predictions
-                    </Link>
-                    <Link
-                      to="/charts/allocation"
-                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
-                      role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
-                    >
-                      Allocation Grid
                     </Link>
                   </div>
                 </div>

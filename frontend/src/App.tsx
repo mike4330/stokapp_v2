@@ -5,7 +5,7 @@
  * With assistance from Claude (Anthropic)
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Transactions from './pages/Transactions';
@@ -24,10 +24,34 @@ import AllocationGrid from './pages/AllocationGrid';
 import PortfolioAnalyzer from './pages/PortfolioAnalyzer';
 import DividendPredictions from './pages/DividendPredictions';
 import PortfolioDetails from './pages/PortfolioDetails';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import './App.css';
+import IncomeCharts from './pages/IncomeCharts';
 
 // Placeholder components for routes
 const DividendCharts = () => <div className="p-4">Dividend History Charts</div>;
+
+const COLORS = [
+  '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28CFF', '#FF6699', '#33CC99', '#FF4444', '#FFB347', '#B6D7A8',
+];
+
+interface PieData {
+  symbol: string;
+  value: number;
+}
+
+function combineSmallSlices(data: PieData[], thresholdPercent: number): PieData[] {
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  const threshold = total * (thresholdPercent / 100);
+  const large = data.filter(d => d.value >= threshold);
+  const small = data.filter(d => d.value < threshold);
+  if (small.length === 0) return data;
+  const otherValue = small.reduce((sum, d) => sum + d.value, 0);
+  return [
+    ...large,
+    { symbol: 'Other', value: otherValue },
+  ];
+}
 
 function App() {
   return (
@@ -52,6 +76,7 @@ function App() {
             <Route path="/charts/sector" element={<SectorAllocationChart />} />
             <Route path="/charts/sunburst" element={<PortfolioVisualization />} />
             <Route path="/charts/dividends" element={<DividendCharts />} />
+            <Route path="/charts/income" element={<IncomeCharts />} />
             <Route path="/charts/allocation" element={<AllocationGrid />} />
             <Route path="/dividend-predictions" element={<DividendPredictions />} />
             <Route path="/settings/scheduler" element={<SchedulerSettings />} />
