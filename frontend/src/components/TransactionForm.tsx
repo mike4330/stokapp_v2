@@ -58,7 +58,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
             if (inputValue) {
                 setFormData(prev => ({ ...prev, symbol: inputValue }));
                 try {
-                    const response = await axios.get<string[]>(`/api/symbols/search?q=${inputValue}`);
+                    const response = await axios.get<string[]>(`/api/crud/symbols/search?q=${inputValue}`);
                     setSymbols(response.data);
                 } catch (error) {
                     console.error('Failed to fetch symbols:', error);

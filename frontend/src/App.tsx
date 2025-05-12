@@ -24,6 +24,7 @@ import AllocationGrid from './pages/AllocationGrid';
 import PortfolioAnalyzer from './pages/PortfolioAnalyzer';
 import DividendPredictions from './pages/DividendPredictions';
 import PortfolioDetails from './pages/PortfolioDetails';
+import DividendCalendar from './pages/DividendCalendar';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import './App.css';
 import IncomeCharts from './pages/IncomeCharts';
@@ -79,6 +80,7 @@ function App() {
             <Route path="/charts/income" element={<IncomeCharts />} />
             <Route path="/charts/allocation" element={<AllocationGrid />} />
             <Route path="/dividend-predictions" element={<DividendPredictions />} />
+            <Route path="/dividend-calendar" element={<DividendCalendar />} />
             <Route path="/settings/scheduler" element={<SchedulerSettings />} />
             <Route path="/analyze/:runId" element={<PortfolioAnalyzer />} />
           </Routes>

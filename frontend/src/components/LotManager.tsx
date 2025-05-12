@@ -148,7 +148,7 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
       setSymbolInput(inputValue || '');
       if (inputValue) {
         try {
-          const response = await axios.get<string[]>(`/api/symbols/search?q=${inputValue}`);
+          const response = await axios.get<string[]>(`/api/crud/symbols/search?q=${inputValue}`);
           setSymbolSuggestions(response.data);
         } catch (error) {
           setSymbolSuggestions([]);

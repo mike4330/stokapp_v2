@@ -229,4 +229,88 @@ async def get_dividend_frequency(symbol: str, db: Session = Depends(get_db)):
         frequency_data = analysis_service.detect_payment_frequency(symbol)
         return frequency_data
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dividends/calendar")
+async def get_dividend_calendar(
+    start_date: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
+    end_date: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a calendar of upcoming dividend payments.
+    
+    Args:
+        start_date: Optional start date filter (YYYY-MM-DD)
+        end_date: Optional end date filter (YYYY-MM-DD)
+        
+    Returns:
+        List of upcoming dividend payments with additional security information
+    """
+    try:
+        # Build the base query
+        query = text("""
+            WITH current_holdings AS (
+                SELECT 
+                    symbol,
+                    SUM(CASE
+                        WHEN units_remaining IS NULL THEN units
+                        ELSE units_remaining
+                    END) as net_units
+                FROM transactions
+                WHERE xtype = 'Buy'
+                AND disposition IS NULL
+                GROUP BY symbol
+                HAVING net_units > 0
+            )
+            SELECT 
+                d.symbol,
+                d.declare_date as payment_date,
+                d.amount,
+                p.price as current_price,
+                p.divyield,
+                ch.net_units,
+                (ch.net_units * d.amount) as expected_payment
+            FROM dividends d
+            LEFT JOIN prices p ON d.symbol = p.symbol
+            LEFT JOIN current_holdings ch ON d.symbol = ch.symbol
+            WHERE 1=1
+        """)
+        
+        params = {}
+        
+        # Add date filters if provided
+        if start_date:
+            query = text(str(query) + " AND d.declare_date >= :start_date")
+            params["start_date"] = start_date
+            
+        if end_date:
+            query = text(str(query) + " AND d.declare_date <= :end_date")
+            params["end_date"] = end_date
+            
+        # Add default date range if no dates provided (next 90 days)
+        if not start_date and not end_date:
+            query = text(str(query) + " AND d.declare_date >= date('now') AND d.declare_date <= date('now', '+90 days')")
+            
+        # Order by payment date
+        query = text(str(query) + " ORDER BY d.declare_date ASC")
+        
+        result = db.execute(query, params).fetchall()
+        
+        # Format the response
+        calendar = []
+        for row in result:
+            calendar.append({
+                "symbol": row[0],
+                "payment_date": row[1],
+                "amount": float(row[2]) if row[2] is not None else None,
+                "current_price": float(row[3]) if row[3] is not None else None,
+                "dividend_yield": float(row[4]) if row[4] is not None else None,
+                "net_units": float(row[5]) if row[5] is not None else None,
+                "expected_payment": float(row[6]) if row[6] is not None else None
+            })
+            
+        return calendar
+        
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
