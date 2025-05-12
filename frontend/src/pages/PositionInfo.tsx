@@ -5,7 +5,7 @@
  * With assistance from Claude (Anthropic)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import EditTransactionModal from '../components/EditTransactionModal';
@@ -58,7 +58,32 @@ const PositionInfo: React.FC = () => {
   const [showTransactions, setShowTransactions] = useState(true);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const { data: returnData, isLoading: returnDataLoading } = useSymbolReturns(symbol);
+
+  const handleNavigate = useCallback(async (direction: 'next' | 'prev') => {
+    if (direction === 'next' && currentIndex < allPositions.length - 1) {
+      const nextSymbol = allPositions[currentIndex + 1].symbol;
+      navigate(`/positions/${nextSymbol}`);
+      // Fetch new position data immediately
+      try {
+        const response = await axios.get(`/api/positions/${nextSymbol}`);
+        setPosition(response.data);
+      } catch (err) {
+        console.error('Failed to fetch new position data:', err);
+      }
+    } else if (direction === 'prev' && currentIndex > 0) {
+      const prevSymbol = allPositions[currentIndex - 1].symbol;
+      navigate(`/positions/${prevSymbol}`);
+      // Fetch new position data immediately
+      try {
+        const response = await axios.get(`/api/positions/${prevSymbol}`);
+        setPosition(response.data);
+      } catch (err) {
+        console.error('Failed to fetch new position data:', err);
+      }
+    }
+  }, [currentIndex, allPositions, navigate]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -114,7 +139,7 @@ const PositionInfo: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
     };
-  }, [currentIndex, allPositions]); // Add dependencies to ensure we have latest state
+  }, [currentIndex, allPositions, handleNavigate]);
 
   const handleEditClick = (transaction: Transaction) => {
     if (!symbol) return; // Guard against undefined symbol
@@ -145,15 +170,10 @@ const PositionInfo: React.FC = () => {
     }
   };
 
-  const handleNavigate = (direction: 'next' | 'prev') => {
-    if (direction === 'next' && currentIndex < allPositions.length - 1) {
-      const nextSymbol = allPositions[currentIndex + 1].symbol;
-      navigate(`/positions/${nextSymbol}`);
-    } else if (direction === 'prev' && currentIndex > 0) {
-      const prevSymbol = allPositions[currentIndex - 1].symbol;
-      navigate(`/positions/${prevSymbol}`);
-    }
-  };
+  // Reset logo error state when position changes
+  useEffect(() => {
+    setLogoError(false);
+  }, [position?.symbol]);
 
   if (loading) {
     return (
@@ -186,14 +206,20 @@ const PositionInfo: React.FC = () => {
       
       <div className="bg-gray-800 rounded-lg shadow-xl p-6 mb-6">
         <div className="flex items-center mb-6">
-          <img 
-            src={position.logo_url} 
-            alt={`${position.symbol} logo`} 
-            className="w-16 h-16 mr-4 rounded-lg"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
+          {!logoError && position.logo_url && (
+            <img 
+              src={position.logo_url} 
+              alt={`${position.symbol} logo`} 
+              className="w-16 h-16 mr-4 rounded-lg"
+              onError={(e) => {
+                setLogoError(true);
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+              onLoad={(e) => {
+                (e.target as HTMLImageElement).style.display = 'block';
+              }}
+            />
+          )}
           <h1 className="text-2xl font-bold text-white">{position.symbol}</h1>
         </div>
 
