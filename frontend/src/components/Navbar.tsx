@@ -139,6 +139,14 @@ const ButtonizedNavbar: React.FC = () => {
                       Dividend History
                     </Link>
                     <Link
+                      to="/dividend-calendar"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsChartsOpen(false)}
+                    >
+                      Dividend Calendar
+                    </Link>
+                    <Link
                       to="/dividend-predictions"
                       className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
                       role="menuitem"
