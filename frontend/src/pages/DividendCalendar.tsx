@@ -1,3 +1,9 @@
+/*
+ * Copyright (C) 2025 Mike Roetto <mike@roetto.org>
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * With assistance from Claude (Anthropic)
+ */
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { getDividendStyle, generateColorStops } from '../utils/colorUtils';

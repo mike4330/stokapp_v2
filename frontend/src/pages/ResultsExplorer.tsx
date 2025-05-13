@@ -1,3 +1,9 @@
+/*
+ * Copyright (C) 2025 Mike Roetto <mike@roetto.org>
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * With assistance from Claude (Anthropic)
+ */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
