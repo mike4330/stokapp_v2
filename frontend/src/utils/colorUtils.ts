@@ -4,8 +4,7 @@
  */
 
 /**
- * Viridis-like color stops representing the palette at different points
- * These colors approximate the viridis palette
+ * Viridis color stops representing the palette at different points
  */
 const VIRIDIS_COLORS = [
   { value: 0, color: [68, 1, 84] },    // Dark purple
@@ -64,8 +63,8 @@ function hasGoodContrastWithWhite(r: number, g: number, b: number): boolean {
 }
 
 /**
- * Get a background color with proper text contrast for a dividend amount
- * @param amount The dividend amount
+ * Get a dynamic color for a dividend amount based on the current max amount
+ * @param amount The dividend amount to get a color for
  * @param minAmount The minimum amount to start the color scale (default: 1)
  * @param maxAmount The maximum amount for the color scale (default: 100)
  * @returns An object with the background color and text color
@@ -101,30 +100,61 @@ export function getDividendColor(amount: number, minAmount = 1, maxAmount = 100)
 }
 
 /**
- * Get Tailwind CSS classes for a dividend amount
- * For use in components with Tailwind
+ * Generate CSS style object for a dividend amount
+ * Uses the viridis color palette with dynamic scaling
  * @param amount The dividend amount
- * @returns A string of Tailwind CSS classes for styling
- */
-export function getDividendColorClasses(amount: number): string {
-  const { background, text } = getDividendColor(amount);
-  
-  // We need to use inline style for the background since we're using a dynamic color
-  // But we can use Tailwind for text color
-  return `${text === 'white' ? 'text-white' : 'text-black'} dividend-color-${amount.toFixed(2).replace('.', '-')}`;
-}
-
-/**
- * Generate a CSS style object for a dividend amount
- * For use with inline styles
- * @param amount The dividend amount
+ * @param minAmount The minimum amount for the scale (default: 1)
+ * @param maxAmount The maximum amount for the scale (default: 100)
  * @returns A style object with background and text color
  */
-export function getDividendStyle(amount: number): React.CSSProperties {
-  const { background, text } = getDividendColor(amount);
+export function getDividendStyle(amount: number, minAmount = 1, maxAmount = 100): {
+  backgroundColor: string,
+  color: string
+} {
+  const { background, text } = getDividendColor(amount, minAmount, maxAmount);
   
   return {
     backgroundColor: background,
     color: text
   };
-} 
+}
+
+/**
+ * Generate color stops for a legend based on the current maximum amount
+ * @param maxAmount The maximum amount to generate color stops for
+ * @param steps Number of color stops to generate (default: 10)
+ * @returns Array of color stop objects with value and color
+ */
+export function generateColorStops(maxAmount: number, steps = 10): Array<{
+  value: number,
+  color: string,
+  text: string
+}> {
+  const stops = [];
+  
+  for (let i = 0; i < steps; i++) {
+    const value = (i + 1) * (maxAmount / steps);
+    const { background, text } = getDividendColor(value, 1, maxAmount);
+    
+    stops.push({
+      value,
+      color: background,
+      text
+    });
+  }
+  
+  return stops;
+}
+
+/**
+ * Get Tailwind CSS classes for a dividend amount
+ * Note: This won't work directly with the dynamic color system, as Tailwind
+ * requires classes to be pre-defined. This is kept for compatibility.
+ */
+export function getDividendColorClasses(amount: number): string {
+  const { text } = getDividendColor(amount);
+  
+  // We can only use the text color class from Tailwind since the background
+  // color is dynamically generated
+  return `${text === 'white' ? 'text-white' : 'text-black'} dividend-color-dynamic`;
+}
