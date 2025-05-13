@@ -42,6 +42,13 @@ type SortField = keyof OpenLot;
 type SortDirection = 'asc' | 'desc';
 type TermFilter = 'all' | 'long' | 'short';
 
+// Add new type for table columns
+type TableColumn = {
+  field: SortField | 'close' | 'edit';
+  label: string;
+  className: string;
+};
+
 export interface LotManagerRef {
   refresh: () => Promise<void>;
 }
@@ -407,7 +414,7 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
                     type="range"
                     min={minBasis}
                     max={maxBasis}
-                    step={5}
+                    step={1}
                     value={basisFilter}
                     onChange={(e) => setBasisFilter(Number(e.target.value))}
                     className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer dark:bg-gray-600
@@ -442,14 +449,16 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
                 { field: 'profit_loss' as const, label: 'P/L$', className: 'w-20' },
                 { field: 'pl_pct' as const, label: 'P/L%', className: 'w-16' },
                 { field: 'term' as const, label: 'Term', className: 'w-16' },
-              ].map(({ field, label, className }) => (
+                { field: 'edit' as const, label: 'Edit', className: 'w-16' },
+                { field: 'close' as const, label: 'Close', className: 'w-16' },
+              ].map(({ field, label, className }: TableColumn) => (
                 <th
                   key={field}
-                  onClick={() => handleSort(field)}
+                  onClick={() => handleSort(field as SortField)}
                   className={`px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 ${className}`}
                 >
                   {label}
-                  <SortIcon field={field} />
+                  <SortIcon field={field as SortField} />
                 </th>
               ))}
             </tr>
@@ -462,13 +471,7 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
                 className="hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
               >
                 <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                  <button
-                    className="underline text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 cursor-pointer"
-                    title="Close this lot"
-                    onClick={() => props.onCloseLot && props.onCloseLot(lot)}
-                  >
-                    {lot.id}
-                  </button>
+                  {lot.id}
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                   <button
@@ -517,6 +520,24 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {lot.term ?? '-'}
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                  <button
+                    className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800 hover:text-blue-800 dark:hover:text-blue-200 cursor-pointer transition-colors"
+                    title="Edit this lot"
+                    onClick={() => handleEditLot(lot)}
+                  >
+                    Edit
+                  </button>
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                  <button
+                    className="px-2 py-1 rounded bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800 hover:text-red-800 dark:hover:text-red-200 cursor-pointer transition-colors"
+                    title="Close this lot"
+                    onClick={() => props.onCloseLot && props.onCloseLot(lot)}
+                  >
+                    Close
+                  </button>
                 </td>
               </tr>
             ))}

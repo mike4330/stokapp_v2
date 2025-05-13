@@ -2,9 +2,19 @@ import React, { useEffect, useState } from 'react';
 import SymbolWeightChart from '../components/SymbolWeightChart';
 
 const colorPalette = [
-  '#fe1111', '#f472b6', '#fbcfe8', '#ec4899', '#c4b5fd', '#8b5cf6', '#60a5fa', '#4ade80',
-  '#facc15', '#f87171', '#38bdf8', '#fbbf24', '#34d399', '#f472b6', '#818cf8', '#f59e42',
-  '#f472b6', '#a3e635', '#f87171', '#fbbf24', '#f472b6', '#f472b6', '#f472b6', '#f472b6',
+'#0000dd',
+'#226922',
+'#cc1111',
+'#1111ee', 
+'#115811',
+'#df1c1c',
+'#2222ff', 
+'#337a33',
+'#3333ff', 
+'#ef2d2d' ,
+'#4444ff',
+'#448b44',
+    
 ];
 
 interface WeightDataPoint {
@@ -88,7 +98,7 @@ const AllocationGrid: React.FC = () => {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6 text-gray-100">Allocation Grid</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-5">
         {symbols.map((symbol, i) => {
           const state = symbolStates[symbol] || { data: null, loading: true, error: null };
           const color = colorPalette[i % colorPalette.length];

@@ -44,6 +44,18 @@ const ACCOUNTS = ['FID', 'FIDRI', 'TT'];
 // Available transaction types
 const TRANSACTION_TYPES = ['Buy', 'Sell', 'Div'];
 
+interface TransactionUpdatePayload {
+  date: string;
+  account: string;
+  symbol: string;
+  type: string;
+  units: number;
+  price: number;
+  disposition?: string;
+  gain?: number;
+  units_remaining?: number;
+}
+
 /**
  * Modal component for editing transaction details
  * Supports:
@@ -147,13 +159,22 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         symbol: formData.symbol,
         type: formData.type,
         units: parseFloat(formData.units),
-        price: parseFloat(formData.price),
-        gain: formData.type === 'Sell' && formData.gain ? parseFloat(formData.gain) : 0
+        price: parseFloat(formData.price)
       };
+
+      // Handle gain field - only include if it's a valid number
+      if (formData.type === 'Sell' && formData.gain !== '') {
+        const gainValue = parseFloat(formData.gain);
+        if (!isNaN(gainValue)) {
+          updatedTransaction.gain = gainValue;
+        }
+      }
+
       // Only include units_remaining if it's a valid number
       if (formData.units_remaining !== '' && !isNaN(Number(formData.units_remaining))) {
         updatedTransaction.units_remaining = parseFloat(formData.units_remaining);
       }
+
       // Debug logging
       console.log('Original transaction:', transaction);
       console.log('Form data:', formData);
@@ -183,8 +204,16 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           errorMessage = responseData.detail;
         } else if (responseData && typeof responseData.message === 'string') {
           errorMessage = responseData.message;
+        } else if (responseData && Array.isArray(responseData)) {
+          // Handle array of validation errors
+          errorMessage = responseData.map(err => err.msg || err.message).join(', ');
         } else if (responseData) {
-          errorMessage = JSON.stringify(responseData);
+          // Safely stringify any other error object
+          try {
+            errorMessage = JSON.stringify(responseData);
+          } catch {
+            errorMessage = 'An error occurred while processing the request';
+          }
         }
       }
       
@@ -210,16 +239,22 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     try {
       console.log(`Marking transaction ${transaction.id} as sold...`);
       // Update transaction with sold disposition
-      await axios.put(`/api/transactions/${transaction.id}`, {
+      const updatePayload: TransactionUpdatePayload = {
         date: transaction.date_new,
         account: transaction.acct,
         symbol: transaction.symbol,
         type: transaction.xtype,
         units: transaction.units,
         price: transaction.price,
-        gain: transaction.gain,
         disposition: 'sold'
-      });
+      };
+
+      // Only include gain if it's a valid number
+      if (transaction.gain !== null && !isNaN(Number(transaction.gain))) {
+        updatePayload.gain = Number(transaction.gain);
+      }
+
+      await axios.put(`/api/transactions/${transaction.id}`, updatePayload);
       console.log(`Successfully marked transaction ${transaction.id} (${transaction.symbol}) as sold`);
       await onTransactionUpdated();
       onClose();
@@ -227,10 +262,29 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       console.error('Failed to mark transaction as sold:', error);
       let errorMessage = 'Failed to mark transaction as sold';
       
-      if (axios.isAxiosError(error) && error.response?.data) {
-        errorMessage = typeof error.response.data === 'string' 
-          ? error.response.data 
-          : error.response.data.detail || error.response.data.message || JSON.stringify(error.response.data);
+      if (axios.isAxiosError(error) && error.response) {
+        console.log('Error response data:', error.response.data);
+        console.log('Error response status:', error.response.status);
+        console.log('Error response headers:', error.response.headers);
+        
+        const responseData = error.response.data;
+        if (typeof responseData === 'string') {
+          errorMessage = responseData;
+        } else if (responseData && typeof responseData.detail === 'string') {
+          errorMessage = responseData.detail;
+        } else if (responseData && typeof responseData.message === 'string') {
+          errorMessage = responseData.message;
+        } else if (responseData && Array.isArray(responseData)) {
+          // Handle array of validation errors
+          errorMessage = responseData.map(err => err.msg || err.message).join(', ');
+        } else if (responseData) {
+          // Safely stringify any other error object
+          try {
+            errorMessage = JSON.stringify(responseData);
+          } catch {
+            errorMessage = 'An error occurred while processing the request';
+          }
+        }
       }
       
       setError(errorMessage);
