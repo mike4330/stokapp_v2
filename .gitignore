@@ -68,3 +68,14 @@ backend/app/pricedataset.csv
 backend/model_repository/*.json
 frontend/reference_code/*.csv
 frontend/reference_code/*.cache
+frontend/reference_code/*.php
+frontend/reference_code/*.py
+frontend/reference_code/*.txt
+backend/data/mpmv2.db
+backend/app/scheduler/job_states.json
+cron_migration/*
+backend/app/config/sectormap.txt
+backend/app/config/tickers.txt
+backend/nohup.out
+backend/app/scheduler/job_states.json
+backend/app/scheduler/job_states.json
