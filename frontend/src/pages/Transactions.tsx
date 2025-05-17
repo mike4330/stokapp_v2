@@ -204,8 +204,8 @@ const Transactions: React.FC = () => {
                           {transaction.xtype === 'Sell' && transaction.gain !== null && (
                             <span className={`${
                               transaction.gain >= 0 
-                                ? 'text-green-600 dark:text-green-400' 
-                                : 'text-red-600 dark:text-red-400'
+                                ? 'text-green-600 dark:text-green-400 font-mono' 
+                                : 'text-red-600 dark:text-red-400 font-mono'
                             }`}>
                               {transaction.gain >= 0 ? '+' : ''}${transaction.gain.toFixed(2)}
                             </span>

@@ -111,7 +111,7 @@ const AllocationGrid: React.FC = () => {
           return (
             <div
               key={symbol}
-              className="rounded-xl bg-gray-900/80 dark:bg-gray-800/80 border border-gray-700 shadow-lg p-4 h-72 flex flex-col transition hover:ring-2 hover:ring-primary-500"
+              className="rounded-xl bg-gray-900/80 dark:bg-gray-900/80 border border-gray-700 shadow-lg p-4 h-72 flex flex-col transition hover:ring-2 hover:ring-primary-500"
             >
               <div className="flex items-center mb-2">
                 <span className="font-semibold text-lg text-gray-100 mr-2">{symbol}</span>

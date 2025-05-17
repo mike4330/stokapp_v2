@@ -18,12 +18,14 @@ How to add a new scheduled job:
 See the README for more details and examples.
 """
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.executors.pool import ThreadPoolExecutor
+from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 import logging
 import json
 import os
+import signal
+import atexit
 from pathlib import Path
 
 # Configure logging for the scheduler
@@ -35,9 +37,10 @@ US_EASTERN = timezone('US/Eastern')
 MARKET_OPEN_HOUR = 9  # 9:30 AM ET is standard market open, using 9 to be safe
 MARKET_CLOSE_HOUR = 16  # 4:00 PM ET is standard market close
 
-# Create a ThreadPoolExecutor
+# Create executors
 executors = {
-    'default': ThreadPoolExecutor(max_workers=5)
+    'default': ThreadPoolExecutor(max_workers=5),
+    'processpool': ProcessPoolExecutor(max_workers=3)
 }
 
 # Configure job defaults
@@ -76,6 +79,18 @@ def save_job_states(states):
             json.dump(states, f, indent=2)
     except Exception as e:
         scheduler_logger.error(f"Error saving job states: {e}")
+
+def shutdown_scheduler(signum=None, frame=None):
+    """Handle scheduler shutdown."""
+    if scheduler.running:
+        scheduler_logger.info("Shutting down scheduler...")
+        scheduler.shutdown(wait=True)
+        scheduler_logger.info("Scheduler shutdown complete")
+
+# Register shutdown handlers
+atexit.register(shutdown_scheduler)
+signal.signal(signal.SIGTERM, shutdown_scheduler)
+signal.signal(signal.SIGINT, shutdown_scheduler)
 
 def initialize_scheduler():
     """Initialize and start the scheduler."""

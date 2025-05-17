@@ -12,13 +12,12 @@ import Transactions from './pages/Transactions';
 import Holdings from './pages/Holdings';
 import PositionInfo from './pages/PositionInfo';
 import SectorAllocationChart from './components/SectorAllocationChart';
-import BuyRecommendations from './pages/BuyRecommendations';
 import MPTModelling from './pages/MPTModelling';
 import ResultsExplorer from './pages/ResultsExplorer';
 import SchedulerSettings from './pages/SchedulerSettings';
 import PortfolioPerformancePage from './pages/PortfolioPerformancePage';
 import PortfolioVisualization from './pages/PortfolioVisualization';
-import PotentialLots from './pages/PotentialLots';
+import PortfolioBalance from './pages/PortfolioBalance';
 import LotManagerPage from './pages/LotManagerPage';
 import AllocationGrid from './pages/AllocationGrid';
 import PortfolioAnalyzer from './pages/PortfolioAnalyzer';
@@ -28,6 +27,7 @@ import DividendCalendar from './pages/DividendCalendar';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import './App.css';
 import IncomeCharts from './pages/IncomeCharts';
+import SecurityManagement from './pages/SecurityManagement';
 
 // Placeholder components for routes
 const DividendCharts = () => <div className="p-4">Dividend History Charts</div>;
@@ -70,8 +70,7 @@ function App() {
             <Route path="/positions/:symbol" element={<PositionInfo />} />
             <Route path="/modelling/mpt" element={<MPTModelling />} />
             <Route path="/modelling/results-explorer" element={<ResultsExplorer />} />
-            <Route path="/modelling/recommendations" element={<BuyRecommendations />} />
-            <Route path="/potential-lots" element={<PotentialLots />} />
+            <Route path="/portfolio-balance" element={<PortfolioBalance />} />
             <Route path="/lot-manager" element={<LotManagerPage />} />
             <Route path="/charts/portfolio" element={<PortfolioPerformancePage />} />
             <Route path="/charts/sector" element={<SectorAllocationChart />} />
@@ -82,6 +81,7 @@ function App() {
             <Route path="/dividend-predictions" element={<DividendPredictions />} />
             <Route path="/dividend-calendar" element={<DividendCalendar />} />
             <Route path="/settings/scheduler" element={<SchedulerSettings />} />
+            <Route path="/settings/securities" element={<SecurityManagement />} />
             <Route path="/analyze/:runId" element={<PortfolioAnalyzer />} />
           </Routes>
         </main>

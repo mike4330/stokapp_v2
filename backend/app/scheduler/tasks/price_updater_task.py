@@ -15,10 +15,14 @@ import yfinance as yf
 import requests_cache
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from curl_cffi import requests
 
 from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
+
+# Create a session with Chrome impersonation
+session = requests.Session(impersonate="chrome")
 
 def update_prices():
     """
@@ -69,23 +73,22 @@ def update_prices():
                     continue
                     
                 try:
+                    # Convert BRK.B to BRK-B for Yahoo Finance
+                    fetch_ticker = ticker.replace('.B', '-B')
+                    
                     # Fetch the current price
-                    stock = yf.Ticker(ticker, session=session)
+                    stock = yf.Ticker(fetch_ticker, session=session)
                     price = stock.fast_info["last_price"]
                     price = round(price, 8)
                     
                     if price is None:
-                        logger.warning(f"Bad data for {ticker}, skipping")
+                        logger.warning(f"Bad data for {fetch_ticker}, skipping")
                         continue
                         
                     ts = time.time()
                     logger.info(f"Price update for {ticker}: {price}")
                     
-                    # Handle the BRK-B case (as in the original code)
-                    if ticker == "BRK-B":
-                        ticker = "BRK.B"
-                        
-                    # Update the price in the database
+                    # Update the price in the database using the original ticker
                     update_query = text("""
                         UPDATE prices 
                         SET price = :price, lastupdate = :ts 

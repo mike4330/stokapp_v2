@@ -90,7 +90,7 @@ const ButtonizedNavbar: React.FC = () => {
             {/* Main Navigation Buttons */}
             <Button to="/transactions">Transactions</Button>
             <Button to="/holdings">Holdings</Button>
-            <Button to="/potential-lots">Potential Lots</Button>
+            <Button to="/portfolio-balance">Portfolio Balance</Button>
             <Button to="/lot-manager">Lot Manager</Button>
             
             {/* Charts Dropdown */}
@@ -228,6 +228,14 @@ const ButtonizedNavbar: React.FC = () => {
                     >
                       Scheduler
                     </Link>
+                    <Link
+                      to="/settings/securities"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsSettingsOpen(false)}
+                    >
+                      Securities
+                    </Link>
                   </div>
                 </div>
               )}
@@ -278,14 +286,6 @@ const ButtonizedNavbar: React.FC = () => {
                     >
                       Results Explorer
                     </Link>
-                    <Link
-                      to="/modelling/recommendations"
-                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
-                      role="menuitem"
-                      onClick={() => setIsModellingOpen(false)}
-                    >
-                      Buy Recommendations
-                    </Link>
                   </div>
                 </div>
               )}
@@ -318,7 +318,7 @@ const ButtonizedNavbar: React.FC = () => {
         <div className="pt-2 pb-3 space-y-2">
           <Button to="/transactions" className="block mx-2">Transactions</Button>
           <Button to="/holdings" className="block mx-2">Holdings</Button>
-          <Button to="/potential-lots" className="block mx-2">Potential Lots</Button>
+          <Button to="/portfolio-balance" className="block mx-2">Portfolio Balance</Button>
           <Button to="/lot-manager" className="block mx-2">Lot Manager</Button>
           {/* Mobile Charts submenu */}
           <div className="block mx-2">

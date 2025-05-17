@@ -61,21 +61,22 @@ const SymbolWeightChart: React.FC<SymbolWeightChartProps> = ({
   }, [data, minYAxisPadding]);
 
   return (
-    <ResponsiveContainer width="100%" height={210}>
+    <ResponsiveContainer width="98%" height={210}>
       <ComposedChart data={data} margin={{ top: 1, right: 20, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="2 2" stroke="#444444" />
-        <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={20} />
+        <XAxis dataKey="date" tick={{ fontSize: 10 , fill: '#ccc'}} minTickGap={20} />
         <YAxis 
-          tick={{ fontSize: 10 }} 
-          width={32} 
+          tick={{ fontSize: 11, fill: '#ccc' }} 
+          width={35} 
+          
           domain={yAxisDomain}
-          tickFormatter={(value) => value.toFixed(2)}
+          tickFormatter={(value) => value.toFixed(3)}
         />
         <Tooltip 
           formatter={(value: number) => value.toFixed(4)} 
           labelFormatter={(label) => `Date: ${label}`}
         />
-        <Legend verticalAlign="top" height={24} />
+        <Legend verticalAlign="top" height={26} />
         <Area
           type="monotone"
           dataKey="weight"

@@ -12,6 +12,7 @@ from app.api.routes import router as api_router
 from app.api.crudroutes import router as crud_router
 from app.api.dividend_routes import router as dividend_router
 from app.scheduler.config import initialize_scheduler, scheduler, load_job_states, save_job_states
+from app.scheduler.process_manager import register_shutdown_handlers, cleanup_scheduler_processes
 from .mpt_modeling import (
     initiate_mpt_modeling,
     get_task_status,
@@ -71,6 +72,7 @@ class SaveToRepoRequest(BaseModel):
 def startup_event():
     """Initialize services on application startup."""
     logger.info("Starting application")
+    register_shutdown_handlers()  # Register signal handlers
     initialize_scheduler()
     logger.info("Application startup complete")
 
@@ -81,6 +83,7 @@ def shutdown_event():
     if scheduler.running:
         scheduler.shutdown()
         logger.info("Scheduler shutdown complete")
+    cleanup_scheduler_processes()  # Clean up any remaining processes
 
 @app.get("/")
 def read_root():

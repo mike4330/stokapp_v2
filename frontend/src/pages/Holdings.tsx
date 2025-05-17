@@ -288,7 +288,7 @@ const Holdings: React.FC = () => {
             <div>
               <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Portfolio Value</h3>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                ${totalValue.toFixed(2)}
+                ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <Link 

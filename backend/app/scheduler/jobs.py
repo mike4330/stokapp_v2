@@ -2,6 +2,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import logging
+from datetime import datetime
 
 from app.scheduler.config import MARKET_OPEN_HOUR, MARKET_CLOSE_HOUR, US_EASTERN
 # Import directly from the module file
