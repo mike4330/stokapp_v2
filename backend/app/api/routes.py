@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request, File, UploadFile, Form, BackgroundTasks
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Dict, Any, Optional
@@ -6,10 +7,12 @@ from pydantic import BaseModel
 from datetime import date, datetime, timedelta
 import numpy as np
 import logging
-from sklearn.preprocessing import StandardScaler
 import os
 import pandas as pd
 import time
+import requests
+import json
+import re
 
 from app.db.session import get_db
 from app.db import crud
@@ -23,8 +26,8 @@ from app.db.crud import (
     get_historical_returns_data
 )
 from app.schemas.visualization import SunburstResponse, SunburstData
-from app.mpt_modeling import initiate_mpt_modeling, get_task_status
-from fastapi import BackgroundTasks
+from app.db.sec_session import SECSessionLocal, get_sec_db
+from app.models.sec_models import SECCompanyInfo, SECFilingData
 
 class TransactionCreate(BaseModel):
     date: date
@@ -65,6 +68,17 @@ class MPTData(BaseModel):
     symbol: str
     sector: str
 
+class HoldingCountResponse(BaseModel):
+    sector: str
+    large: int
+    medium: int
+    small: int
+    total: int
+
+class SectorMarketCapResponse(BaseModel):
+    holdings: List[HoldingCountResponse]
+    totals: Dict[str, int]
+
 class SecurityCreate(BaseModel):
     symbol: str
     asset_class: str
@@ -75,16 +89,80 @@ class SecurityCreate(BaseModel):
 
 router = APIRouter()
 
-@router.get("/mpt", response_model=List[MPTData])
-def get_mpt_data(db: Session = Depends(get_db)):
-    """Get symbol and sector mapping from MPT table"""
+@router.get("/holdings-by-sector-marketcap", response_model=SectorMarketCapResponse)
+def get_holdings_by_sector_marketcap(db: Session = Depends(get_db)):
+    """
+    Get count of holdings grouped by sector and market cap
+    """
     try:
-        query = text("SELECT symbol, sector FROM MPT WHERE symbol IS NOT NULL AND sector IS NOT NULL")
-        result = db.execute(query)
-        mpt_data = [{"symbol": row[0], "sector": row[1]} for row in result]
-        return mpt_data
+        # Query to get holdings grouped by sector and market cap
+        # Pull data from transactions and MPT tables instead of positions
+        query = text("""
+        WITH unique_symbols AS (
+            SELECT DISTINCT symbol
+            FROM transactions
+            WHERE xtype = 'Buy'
+            AND disposition IS NULL
+            GROUP BY symbol
+            HAVING SUM(CASE WHEN units_remaining IS NULL THEN units ELSE units_remaining END) > 0
+        )
+        SELECT 
+            COALESCE(mpt.sector, 'Unknown') as sector,
+            COALESCE(mpt.market_cap, 'Unknown') as market_cap,
+            COUNT(*) as count
+        FROM unique_symbols us
+        JOIN MPT mpt ON us.symbol = mpt.symbol
+        WHERE COALESCE(mpt.sector, 'Unknown') != 'Bonds'
+        GROUP BY sector, market_cap
+        ORDER BY sector, market_cap
+        """)
+        
+        results = db.execute(query).fetchall()
+        
+        # Process results into expected format
+        sectors = {}
+        totals = {'large': 0, 'medium': 0, 'small': 0, 'total': 0}
+        
+        for row in results:
+            sector = row[0]
+            raw_market_cap = row[1].lower() if row[1] else 'unknown'  # Ensure lowercase for consistency
+            count = row[2]
+            
+            # Map market cap classifications:
+            # - 'mega' -> 'large'
+            # - 'micro' -> 'small'
+            market_cap = raw_market_cap
+            if raw_market_cap == 'mega':
+                market_cap = 'large'
+            elif raw_market_cap == 'micro':
+                market_cap = 'small'
+                
+            # Skip if market_cap not in expected categories
+            if market_cap not in ('large', 'medium', 'small'):
+                continue
+                
+            if sector not in sectors:
+                sectors[sector] = {'sector': sector, 'large': 0, 'medium': 0, 'small': 0, 'total': 0}
+            
+            sectors[sector][market_cap] = sectors[sector].get(market_cap, 0) + count
+            sectors[sector]['total'] += count
+            totals[market_cap] += count
+            totals['total'] += count
+        
+        # Convert dict to list
+        holdings_list = list(sectors.values())
+        
+        # Sort by sector name
+        holdings_list.sort(key=lambda x: x['sector'])
+        
+        return {
+            'holdings': holdings_list,
+            'totals': totals
+        }
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT data: {str(e)}")
+        logging.error(f"Error fetching holdings by sector/marketcap: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/holdings", response_model=List[Holding])
 def get_holdings(group_by_account: bool = False, db: Session = Depends(get_db)):
@@ -746,142 +824,6 @@ def get_symbol_transactions(symbol: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve transactions: {str(e)}")
 
-@router.get("/model-recommendations", response_model=List[ModelRecommendation])
-def get_model_recommendations(db: Session = Depends(get_db)):
-    try:
-        logger = logging.getLogger(__name__)
-        logger.info("Model recommendations API called")
-        
-        # Query the necessary data
-        query = text("""
-            SELECT prices.symbol, prices.price, MPT.sectorshort, overamt, prices.divyield,
-                   fcf_ni_ratio, volat, RSI, mean50, mean200, div_growth_rate, pe, average_pe, (pe-average_pe) as PE_diff
-            FROM prices, MPT, sectors
-            WHERE prices.symbol = MPT.symbol AND sectors.symbol = MPT.symbol
-        """)
-        result = db.execute(query)
-        data = result.fetchall()
-        columns = result.keys()
-        
-        logger.info(f"Query returned {len(data)} rows")
-        
-        import pandas as pd
-        df = pd.DataFrame(data, columns=columns)
-        if df.empty:
-            logger.warning("DataFrame is empty after query")
-            return []
-            
-        # Debug dataframe contents
-        logger.info(f"DataFrame columns: {df.columns.tolist()}")
-        logger.info(f"DataFrame shape: {df.shape}")
-        
-        # Drop rows with any NaN values (matching reference implementation)
-        original_count = len(df)
-        df = df.dropna(how='any')
-        dropped_count = original_count - len(df)
-        logger.info(f"Dropped {dropped_count} rows with NaN values")
-        
-        # Fill any remaining NaN values with 0 (matching reference implementation)
-        df = df.fillna(0)
-        
-        # Define features to use in calculation (in the same order as reference implementation)
-        features = [
-            "RSI",
-            "PE_diff",
-            "volat",
-            "mean50",
-            "mean200",
-            "divyield", 
-            "div_growth_rate",
-            "fcf_ni_ratio",
-        ]
-        
-        # Prepare features - calculate transformations before scaling (matching reference)
-        df['mean50'] = (df['price'] - df['mean50']) / df['price']
-        df['mean200'] = (df['price'] - df['mean200']) / df['price']
-        
-        # Use sklearn's StandardScaler to match reference implementation
-        scaler = StandardScaler()
-        data_for_scaling = df[features]
-        scaler.fit(data_for_scaling)
-        
-        # Define weights (same as reference implementation)
-        weights = {
-            "RSI": 1.1,
-            "PE_diff": 1.0,
-            "volat": 0.8,
-            "mean50": 0.85,
-            "mean200": 1.2,
-            "divyield": -1.3,
-            "div_growth_rate": -0.7,
-            "fcf_ni_ratio": -1.2,
-        }
-        
-        # Calculate z-scores with components (similar to reference implementation)
-        def calculate_z_score(row, scaler):
-            # Create raw components dictionary
-            raw_components = {
-                "RSI": row["RSI"],
-                "PE_diff": row["PE_diff"],
-                "volat": row["volat"],
-                "mean50": row["mean50"],
-                "mean200": row["mean200"],
-                "divyield": row["divyield"],
-                "div_growth_rate": row["div_growth_rate"],
-                "fcf_ni_ratio": row["fcf_ni_ratio"],
-            }
-            
-            # Create DataFrame for scaling
-            components_df = pd.DataFrame([raw_components])
-            
-            # Scale the components
-            scaled_components = scaler.transform(components_df)
-            
-            # Convert to dictionary
-            scaled_components_dict = dict(zip(raw_components.keys(), scaled_components[0]))
-            
-            # Apply weights
-            weighted_components = {k: v * weights[k] for k, v in scaled_components_dict.items()}
-            
-            # Sum for final z-score
-            z_score = sum(weighted_components.values())
-            
-            return z_score
-        
-        # Apply the z-score calculation to each row
-        df['z_score'] = df.apply(lambda row: calculate_z_score(row, scaler), axis=1)
-        logger.info("Calculated z-scores successfully")
-        
-        # Filter and sort (matching reference implementation)
-        overweight_min_thresh = -6
-        filtered_df = df[df['overamt'] < overweight_min_thresh]
-        
-        if filtered_df.empty:
-            logger.warning("No symbols with overamt < -6, returning top 15 by z-score without filtering")
-            top15 = df.nsmallest(15, 'z_score')
-        else:
-            top15 = filtered_df.nsmallest(15, 'z_score')
-                
-        logger.info(f"Top 15 recommendations found: {len(top15)} rows")
-        
-        # Return as list of dicts
-        result = [
-            {
-                'symbol': row['symbol'],
-                'sectorshort': row['sectorshort'],
-                'z_score': float(row['z_score']),
-                'overamt': float(row['overamt']) if not pd.isna(row['overamt']) else 0.0
-            }
-            for _, row in top15.iterrows()
-        ]
-        
-        logger.info(f"Returning {len(result)} recommendations")
-        return result
-    except Exception as e:
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in model-recommendations: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
 @router.get("/portfolio/historical")
 async def get_portfolio_history(db: Session = Depends(get_db)):
     """
@@ -925,84 +867,6 @@ async def get_portfolio_returns(db: Session = Depends(get_db)):
     except Exception as e:
         logger.exception(f"Error in portfolio returns endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/debug/historical-table")
-async def debug_historical_table(db: Session = Depends(get_db)):
-    """
-    Debug endpoint to examine the historical table structure and data
-    """
-    try:
-        # Get table schema
-        schema_query = text("PRAGMA table_info(historical)")
-        schema_result = db.execute(schema_query).fetchall()
-        
-        # Get sample data (first 5 rows)
-        sample_query = text("SELECT * FROM historical LIMIT 5")
-        sample_result = db.execute(sample_query).fetchall()
-        
-        # Convert to dictionaries
-        schema = [
-            {
-                "cid": row[0],
-                "name": row[1],
-                "type": row[2],
-                "notnull": row[3],
-                "dflt_value": row[4],
-                "pk": row[5]
-            }
-            for row in schema_result
-        ]
-        
-        # Count records
-        count_query = text("SELECT COUNT(*) FROM historical")
-        total_count = db.execute(count_query).scalar()
-        
-        # Check flag values
-        flag_query = text("SELECT DISTINCT flag FROM historical")
-        flag_result = db.execute(flag_query).fetchall()
-        flags = [row[0] for row in flag_result]
-        
-        # Count by flag
-        counts_by_flag = {}
-        for flag in flags:
-            if flag:
-                count = db.execute(
-                    text("SELECT COUNT(*) FROM historical WHERE flag = :flag"),
-                    {"flag": flag}
-                ).scalar()
-                counts_by_flag[flag] = count
-        
-        # Create sample data from first rows
-        column_names = [col["name"] for col in schema]
-        sample_data = []
-        for row in sample_result:
-            sample_row = {}
-            for i, col_name in enumerate(column_names):
-                if i < len(row):
-                    sample_row[col_name] = row[i]
-            sample_data.append(sample_row)
-        
-        # Check essential columns
-        date_values_query = text("SELECT DISTINCT date FROM historical LIMIT 10")
-        date_values = [row[0] for row in db.execute(date_values_query).fetchall()]
-        
-        value_cost_query = text("SELECT date, value, cost FROM historical WHERE value IS NOT NULL AND cost IS NOT NULL LIMIT 5")
-        value_cost_samples = [
-            {"date": row[0], "value": row[1], "cost": row[2]}
-            for row in db.execute(value_cost_query).fetchall()
-        ]
-        
-        return {
-            "schema": schema,
-            "total_records": total_count,
-            "flags": flags,
-            "counts_by_flag": counts_by_flag,
-            "sample_data": sample_data,
-            "date_samples": date_values,
-            "value_cost_samples": value_cost_samples
-        }
-    except Exception as e:
-        return {"error": str(e)}
 
 @router.get("/returns/by-security", response_model=List[SecurityReturn])
 def get_returns_by_security(db: Session = Depends(get_db)):
@@ -1348,67 +1212,6 @@ def get_symbol_weights(symbols: str = Query(...), days: int = Query(365), db: Se
         logging.error(f"Error in get_symbol_weights: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to retrieve weights: {str(e)}")
 
-@router.post("/run-mpt-modeling")
-def run_mpt_modeling(params: Dict[str, Any], background_tasks: BackgroundTasks):
-    """
-    Initiate an MPT modeling task and return a task ID for polling status.
-    """
-    try:
-        task_id = initiate_mpt_modeling(background_tasks, params)
-        return {"task_id": task_id, "message": "MPT modeling task initiated"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to initiate MPT modeling task: {str(e)}")
-
-@router.get("/task-status/{task_id}")
-def check_task_status(task_id: str):
-    """
-    Check the status of an MPT modeling task by ID.
-    """
-    try:
-        status_data = get_task_status(task_id)
-        return status_data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to check task status: {str(e)}")
-
-@router.get("/data-status")
-def get_data_status(db: Session = Depends(get_db)):
-    """Get the status of the price data file and the latest date in the dataset"""
-    try:
-        # Check if the file exists
-        file_exists = os.path.exists('app/data/pricedataset.csv')
-        
-        # Get the latest date from the database if available
-        latest_date = None
-        if file_exists:
-            try:
-                # Check the latest date in the security_values table
-                query = text("""
-                    SELECT MAX(timestamp)
-                    FROM security_values
-                """)
-                result = db.execute(query).fetchone()
-                if result and result[0]:
-                    latest_date = result[0].strftime('%Y-%m-%d')
-                    
-                # If not found in security_values, try reading from CSV directly    
-                if not latest_date:
-                    try:
-                        df = pd.read_csv('app/data/pricedataset.csv')
-                        if 'Date' in df.columns and not df.empty:
-                            latest_date = pd.to_datetime(df['Date']).max().strftime('%Y-%m-%d')
-                    except Exception as e:
-                        logging.error(f"Error reading price dataset CSV: {str(e)}")
-            except Exception as e:
-                logging.error(f"Error querying database for latest date: {str(e)}")
-        
-        return {
-            "available": file_exists,
-            "latest_date": latest_date
-        }
-    except Exception as e:
-        logging.error(f"Error in get_data_status: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @router.get("/positions/{symbol}/market-value-history")
 def get_market_value_history(symbol: str, db: Session = Depends(get_db)):
     """Get historical market value data for a position"""
@@ -1707,45 +1510,1077 @@ async def get_security_task_status(task_id: str):
     
     return task
 
-@router.delete("/securities/{symbol}")
-async def delete_security(symbol: str, db: Session = Depends(get_db)):
-    """Delete a security from the system"""
+@router.get("/sec/10q/{cik}/all")
+def get_all_10q(cik: str, db: Session = Depends(get_sec_db)):
     try:
-        # Check if security has any positions
-        check_positions = text("""
-            SELECT 1 FROM security_values 
-            WHERE symbol = :symbol AND shares > 0
-            LIMIT 1
-        """)
+        print(f"Starting fetch for all 10-Q filings for CIK: {cik}")
+        # Ensure CIK is padded with leading zeros to 10 digits
+        unpadded_cik = cik.lstrip('0')
+        padded_cik = unpadded_cik.zfill(10)
         
-        has_positions = db.execute(check_positions, {"symbol": symbol}).fetchone()
+        # Fetch all filings from SEC submissions API
+        url = f"https://data.sec.gov/submissions/CIK{padded_cik}.json"
+        headers = {
+            "User-Agent": "Private Research mike@roetto.org"
+        }
+        print(f"Making request to SEC API: {url}")
+        response = requests.get(url, headers=headers)
+        print(f"SEC API response status code: {response.status_code}")
         
-        if has_positions:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Cannot delete {symbol} - security has active positions"
-            )
+        if response.status_code != 200:
+            print(f"SEC API error response: {response.text}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch from SEC API. Status: {response.status_code}, Response: {response.text}")
+
+        try:
+            data = response.json()
+            print(f"Successfully parsed JSON response")
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse JSON response: {str(e)}")
+            print(f"Response content: {response.text[:500]}...")
+            raise HTTPException(status_code=500, detail=f"Invalid JSON response from SEC API: {str(e)}")
+
+        # Extract all 10-Q filings from the response
+        if 'filings' not in data or 'recent' not in data['filings']:
+            print("No filings data found in response")
+            raise HTTPException(status_code=404, detail="No filings data found in SEC API response")
         
-        # Begin transaction
-        db.execute(text("BEGIN TRANSACTION"))
+        recent_filings = data['filings']['recent']
+        form_entries = recent_filings.get('form', [])
         
-        # Delete from all related tables
-        tables = ["prices", "sectors", "asset_classes", "MPT", "dividends"]
+        # Find all indices where the form type is '10-Q'
+        ten_q_indices = []
+        for i, form in enumerate(form_entries):
+            if form == '10-Q':
+                ten_q_indices.append(i)
         
-        for table in tables:
-            delete_query = text(f"DELETE FROM {table} WHERE symbol = :symbol")
-            db.execute(delete_query, {"symbol": symbol})
+        if not ten_q_indices:
+            print("No 10-Q filings found in the response")
+            raise HTTPException(status_code=404, detail="No 10-Q filing found")
+
+        # Fetch XBRL data for detailed financial information
+        xbrl_url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{padded_cik}.json"
+        print(f"Making request to SEC XBRL API: {xbrl_url}")
+        xbrl_response = requests.get(xbrl_url, headers=headers)
+        xbrl_data = None
+        if xbrl_response.status_code == 200:
+            xbrl_data = xbrl_response.json()
+            print(f"Successfully fetched XBRL data")
+        else:
+            print(f"Failed to fetch XBRL data: {xbrl_response.status_code}")
         
-        # Commit the transaction
-        db.execute(text("COMMIT"))
+        # Get company information from XBRL data if available
+        company_info = {
+            'name': xbrl_data.get('entityName', 'Unknown') if xbrl_data else 'Unknown',
+            'cik': xbrl_data.get('cik', unpadded_cik) if xbrl_data else unpadded_cik
+        }
         
-        return {"message": f"Security {symbol} deleted successfully"}
-    
+        # Process XBRL data to organize by filing if available
+        filings_data = {}
+        if xbrl_data and 'facts' in xbrl_data and 'us-gaap' in xbrl_data['facts']:
+            key_concepts = [
+                "Assets", "Liabilities", "StockholdersEquity", "NetIncomeLoss",
+                "EarningsPerShareBasic", "EarningsPerShareDiluted",
+                "CashAndCashEquivalentsAtCarryingValue",
+                "RevenueFromContractWithCustomerExcludingAssessedTax", "Revenue",
+                "OperatingIncomeLoss", "CostOfRevenue", "CostOfGoodsAndServicesSold",
+                "CostOfGoodsSold", "GrossProfit"
+            ]
+            for concept in key_concepts:
+                if concept not in xbrl_data['facts']['us-gaap']:
+                    continue
+                concept_data = xbrl_data['facts']['us-gaap'][concept]
+                for unit_type, units in concept_data.get('units', {}).items():
+                    for filing in units:
+                        if filing.get('form') == '10-Q':
+                            accn = filing.get('accn')
+                            if accn not in filings_data:
+                                filings_data[accn] = {
+                                    'accessionNumber': accn,
+                                    'filingDate': filing.get('filed', ''),
+                                    'reportDate': filing.get('end', ''),
+                                    'fiscal_year': filing.get('fy', ''),
+                                    'fiscal_period': filing.get('fp', ''),
+                                    'company': company_info,
+                                    'data': {}
+                                }
+                            if 'start' in filing:
+                                filings_data[accn]['data'][f"{concept}_{unit_type}_period"] = {
+                                    'value': filing.get('val'),
+                                    'start_date': filing.get('start'),
+                                    'end_date': filing.get('end'),
+                                    'unit': unit_type
+                                }
+                            else:
+                                filings_data[accn]['data'][f"{concept}_{unit_type}"] = {
+                                    'value': filing.get('val'),
+                                    'date': filing.get('end'),
+                                    'unit': unit_type
+                                }
+        
+        # Extract data for all 10-Q filings and combine with XBRL data if available
+        all_10q_filings = []
+        stored_count = 0
+        for idx in ten_q_indices:
+            accession_number = recent_filings['accessionNumber'][idx]
+            filing_metadata = {
+                'form': recent_filings['form'][idx],
+                'accessionNumber': accession_number,
+                'filingDate': recent_filings['filingDate'][idx],
+                'reportDate': recent_filings['reportDate'][idx],
+                'primaryDocument': recent_filings['primaryDocument'][idx] if 'primaryDocument' in recent_filings else None,
+                'primaryDocDescription': recent_filings['primaryDocDescription'][idx] if 'primaryDocDescription' in recent_filings else None,
+                'document_url': f"https://www.sec.gov/Archives/edgar/data/{unpadded_cik}/{accession_number.replace('-', '')}/{recent_filings['primaryDocument'][idx]}" if 'primaryDocument' in recent_filings and recent_filings['primaryDocument'][idx] else None
+            }
+            
+            # Combine metadata with XBRL data if available for this filing
+            filing_data = filings_data.get(accession_number, filing_metadata)
+            if accession_number in filings_data:
+                filing_data.update(filing_metadata)
+                filing_data['company'] = company_info
+            else:
+                filing_data = filing_metadata
+            
+            all_10q_filings.append(filing_data)
+            
+            # Check if filing already exists
+            existing = db.query(SECFilingData).filter(
+                SECFilingData.cik == unpadded_cik,
+                SECFilingData.accession_number == filing_data['accessionNumber'],
+                SECFilingData.data_type == '10-Q'
+            ).first()
+            
+            current_time = datetime.utcnow()
+            if existing:
+                # Update existing record
+                existing.data_json = json.dumps(filing_data)
+                existing.updated_at = current_time
+            else:
+                # Create new record
+                new_filing = SECFilingData(
+                    cik=unpadded_cik,
+                    accession_number=filing_data['accessionNumber'],
+                    data_type='10-Q',
+                    data_json=json.dumps(filing_data)
+                )
+                db.add(new_filing)
+                stored_count += 1
+        
+        # Commit all new filings
+        try:
+            db.commit()
+            print(f"Successfully stored or updated {stored_count} new 10-Q filings in database for CIK {unpadded_cik}")
+        except Exception as db_error:
+            print(f"Database error while storing 10-Q data: {str(db_error)}")
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to store 10-Q data: {str(db_error)}")
+
+        return {
+            "message": f"Retrieved {len(all_10q_filings)} 10-Q filings, stored or updated {stored_count} new filings", 
+            "filings": all_10q_filings
+        }
     except HTTPException:
-        # Re-raise HTTP exceptions
         raise
     except Exception as e:
-        # Rollback in case of error
-        db.execute(text("ROLLBACK"))
-        logging.error(f"Error deleting security: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete security: {str(e)}")
+        print(f"Unexpected error in get_all_10q: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+@router.get("/sec/10q/{cik}/content/{accession_number}")
+def get_filing_content(cik: str, accession_number: str, db: Session = Depends(get_sec_db)):
+    try:
+        print(f"Fetching content for 10-Q filing {accession_number} for CIK: {cik}")
+        
+        # Check if we have this filing in our database
+        filing = db.query(SECFilingData).filter(
+            SECFilingData.cik == cik,
+            SECFilingData.accession_number == accession_number,
+            SECFilingData.data_type == '10-Q'
+        ).first()
+        
+        if not filing:
+            # Fetch filing metadata if not in database
+            # First, remove any existing padding to ensure we don't over-pad
+            unpadded_cik = cik.lstrip('0')
+            padded_cik = unpadded_cik.zfill(10)
+            url = f"https://data.sec.gov/submissions/CIK{padded_cik}.json"
+            headers = {
+                "User-Agent": "Private Research mike@roetto.org"
+            }
+            
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"Failed to fetch filing metadata from SEC API")
+            
+            data = response.json()
+            recent_filings = data['filings']['recent']
+            form_entries = recent_filings.get('form', [])
+            accession_entries = recent_filings.get('accessionNumber', [])
+            
+            filing_index = None
+            for i, acc_num in enumerate(accession_entries):
+                if acc_num == accession_number and form_entries[i] == '10-Q':
+                    filing_index = i
+                    break
+            
+            if filing_index is None:
+                raise HTTPException(status_code=404, detail=f"Filing with accession number {accession_number} not found")
+            
+            # Get primary document name
+            primary_doc = recent_filings.get('primaryDocument', [])[filing_index] if 'primaryDocument' in recent_filings else None
+            if not primary_doc:
+                raise HTTPException(status_code=404, detail=f"Primary document not found for filing {accession_number}")
+            
+            # Format accession number to match SEC file structure (remove dashes)
+            formatted_accession = accession_number.replace('-', '')
+            
+            # Build URL to fetch the HTML document content
+            document_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{formatted_accession}/{primary_doc}"
+        else:
+            # Extract information from stored filing data
+            filing_data = json.loads(filing.data_json)
+            
+            # Get primary document
+            primary_doc = filing_data.get('primaryDocument')
+            if not primary_doc:
+                raise HTTPException(status_code=404, detail=f"Primary document not found for filing {accession_number}")
+            
+            # Format accession number to match SEC file structure (remove dashes)
+            formatted_accession = accession_number.replace('-', '')
+            
+            # Build URL to fetch the HTML document content
+            document_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{formatted_accession}/{primary_doc}"
+        
+        # Fetch the actual filing content
+        print(f"Fetching document from: {document_url}")
+        headers = {
+            "User-Agent": "Private Research mike@roetto.org"
+        }
+        content_response = requests.get(document_url, headers=headers)
+        
+        if content_response.status_code != 200:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to fetch document content. Status: {content_response.status_code}"
+            )
+        
+        # Return the document content and metadata
+        return {
+            "message": "Successfully retrieved filing content",
+            "document_url": document_url,
+            "content": content_response.text
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Unexpected error in get_filing_content: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+@router.get("/sec/10q/{cik}/xbrl")
+def get_10q_xbrl_data(cik: str, db: Session = Depends(get_sec_db)):
+    """
+    Fetch 10-Q filing data using the SEC XBRL API and store it in the database
+    The XBRL API provides structured financial data in a machine-readable format.
+    """
+    try:
+        print(f"Starting XBRL data fetch for CIK: {cik}")
+        # Ensure CIK is padded with leading zeros to 10 digits
+        unpadded_cik = cik.lstrip('0')
+        padded_cik = unpadded_cik.zfill(10)
+        
+        # Fetch company facts from SEC XBRL API
+        url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{padded_cik}.json"
+        headers = {
+            "User-Agent": "Private Research mike@roetto.org"
+        }
+        print(f"Making request to SEC XBRL API: {url}")
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            return JSONResponse(
+                status_code=response.status_code,
+                content={"error": f"Failed to fetch data from SEC API. Status code: {response.status_code}"}
+            )
+        
+        data = response.json()
+        print(f"Successfully fetched XBRL data")
+        
+        # Filter out 10-K data and create a filtered version for storage
+        filtered_data = {
+            'cik': data.get('cik'),
+            'entityName': data.get('entityName'),
+            'facts': {
+                'us-gaap': {}
+            }
+        }
+        
+        # Process and filter the data
+        if 'facts' in data and 'us-gaap' in data['facts']:
+            for concept, concept_data in data['facts']['us-gaap'].items():
+                filtered_units = {}
+                for unit_type, units in concept_data.get('units', {}).items():
+                    # Filter to only include 10-Q filings
+                    filtered_units[unit_type] = [
+                        unit for unit in units 
+                        if unit.get('form') == '10-Q'
+                    ]
+                    if filtered_units[unit_type]:  # Only add if we have 10-Q data
+                        filtered_data['facts']['us-gaap'][concept] = {
+                            'label': concept_data.get('label'),
+                            'description': concept_data.get('description'),
+                            'units': {unit_type: filtered_units[unit_type]}
+                        }
+        
+        # Removed code for downloading and populating SEC-CompanyFacts data
+        # The following block has been commented out to prevent storage of company facts data
+        # try:
+        #     # Check if we already have the complete facts
+        #     existing_facts = db.query(SECFilingData).filter(
+        #         SECFilingData.cik == unpadded_cik,
+        #         SECFilingData.data_type == 'SEC-CompanyFacts'
+        #     ).first()
+        #     
+        #     current_time = datetime.utcnow()
+        #     
+        #     if existing_facts:
+        #         # Update the existing record
+        #         existing_facts.data_json = json.dumps(filtered_data)
+        #         existing_facts.updated_at = current_time
+        #         db.commit()
+        #         print(f"Updated filtered company facts for CIK {unpadded_cik}")
+        #     else:
+        #         # Store the filtered company facts
+        #         facts_data = SECFilingData(
+        #             cik=unpadded_cik,
+        #             accession_number="all_facts",
+        #             data_type='SEC-CompanyFacts',
+        #             data_json=json.dumps(filtered_data)
+        #         )
+        #         db.add(facts_data)
+        #         db.commit()
+        #         print(f"Stored filtered company facts for CIK {unpadded_cik}")
+        # except Exception as e:
+        #     db.rollback()
+        #     print(f"Error storing filtered company facts: {str(e)}")
+        #     # Continue with the regular process even if this fails
+        
+        # Key financial concepts to extract
+        key_concepts = [
+            "Assets",
+            "Liabilities", 
+            "StockholdersEquity",
+            "NetIncomeLoss",
+            "EarningsPerShareBasic",
+            "EarningsPerShareDiluted",
+            "CashAndCashEquivalentsAtCarryingValue",
+            "RevenueFromContractWithCustomerExcludingAssessedTax",
+            "Revenue",
+            "OperatingIncomeLoss",
+            "CostOfRevenue",
+            "CostOfGoodsAndServicesSold",
+            "CostOfGoodsSold",
+            "GrossProfit"
+        ]
+        
+        # Initialize data structure to store 10-Q data
+        filings_data = {}
+        
+        # Get company information
+        company_info = {
+            'name': filtered_data.get('entityName', 'Unknown'),
+            'cik': filtered_data.get('cik', 'Unknown')
+        }
+        
+        # Extract key financial concepts from each 10-Q filing
+        if 'facts' in filtered_data and 'us-gaap' in filtered_data['facts']:
+            for concept in key_concepts:
+                if concept not in filtered_data['facts']['us-gaap']:
+                    print(f"Concept '{concept}' not found in data")
+                    continue
+                
+                concept_data = filtered_data['facts']['us-gaap'][concept]
+                
+                # Process each unit (USD, USD/shares, etc.)
+                for unit_type, units in concept_data.get('units', {}).items():
+                    for filing in units:
+                        # Use accession number as unique identifier for the filing
+                        accn = filing.get('accn')
+                        if accn not in filings_data:
+                            filings_data[accn] = {
+                                'accession_number': accn,
+                                'filing_date': filing.get('filed'),
+                                'report_date': filing.get('end'),
+                                'fiscal_year': filing.get('fy'),
+                                'fiscal_period': filing.get('fp'),
+                                'data': {}
+                            }
+                        
+                        # Store the concept value
+                        if 'start' in filing:
+                            # This is a period value (like income)
+                            filings_data[accn]['data'][f"{concept}_{unit_type}_period"] = {
+                                'value': filing.get('val'),
+                                'start_date': filing.get('start'),
+                                'end_date': filing.get('end'),
+                                'unit': unit_type
+                            }
+                        else:
+                            # This is a point-in-time value (like assets)
+                            filings_data[accn]['data'][f"{concept}_{unit_type}"] = {
+                                'value': filing.get('val'),
+                                'date': filing.get('end'),
+                                'unit': unit_type
+                            }
+        
+        # Convert to a list of filings
+        filings_list = []
+        for accn, filing_data in filings_data.items():
+            filing_data['company'] = company_info
+            filings_list.append(filing_data)
+        
+        # Sort by filing date (most recent first)
+        filings_list.sort(key=lambda x: x.get('filing_date', ''), reverse=True)
+        
+        # Store individual filings in the database
+        stored_count = 0
+        updated_count = 0
+        
+        for filing in filings_list:
+            try:
+                # Check if filing already exists
+                existing = db.query(SECFilingData).filter(
+                    SECFilingData.cik == unpadded_cik,
+                    SECFilingData.accession_number == filing['accession_number'],
+                    SECFilingData.data_type == '10-Q-XBRL'
+                ).first()
+                
+                if existing:
+                    # Update existing filing
+                    existing.data_json = json.dumps(filing)
+                    existing.updated_at = current_time
+                    updated_count += 1
+                else:
+                    # Store new filing
+                    filing_data = SECFilingData(
+                        cik=unpadded_cik,
+                        accession_number=filing['accession_number'],
+                        data_type='10-Q-XBRL',
+                        data_json=json.dumps(filing)
+                    )
+                    db.add(filing_data)
+                    stored_count += 1
+            except Exception as e:
+                print(f"Error storing filing {filing['accession_number']}: {str(e)}")
+                continue
+        
+        try:
+            db.commit()
+            print(f"Successfully stored {stored_count} new filings and updated {updated_count} existing filings")
+        except Exception as e:
+            db.rollback()
+            print(f"Database error while storing filings: {str(e)}")
+        
+        # Update company info table with the latest retrieval
+        try:
+            company = db.query(SECCompanyInfo).filter(SECCompanyInfo.cik == unpadded_cik).first()
+            if company:
+                company.updated_at = current_time
+                db.commit()
+        except Exception as e:
+            print(f"Error updating company info timestamp: {str(e)}")
+            db.rollback()
+        
+        return {
+            "cik": cik,
+            "company_name": company_info['name'],
+            "total_filings": len(filings_list),
+            "new_filings_stored": stored_count,
+            "updated_filings": updated_count,
+            "filings": filings_list
+        }
+        
+    except Exception as e:
+        print(f"Error processing XBRL data: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to process XBRL data: {str(e)}"}
+        )
+
+@router.get("/sec/company-facts/{cik}")
+def get_company_facts(cik: str, db: Session = Depends(get_sec_db)):
+    """
+    Retrieve the complete company facts data from the database
+    This endpoint returns all available financial data for a company
+    """
+    try:
+        # Normalize CIK
+        unpadded_cik = cik.lstrip('0')
+        
+        # Retrieve the complete company facts
+        facts = db.query(SECFilingData).filter(
+            SECFilingData.cik == unpadded_cik,
+            SECFilingData.data_type == 'SEC-CompanyFacts'
+        ).first()
+        
+        if not facts:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "No company facts found for this CIK"}
+            )
+            
+        return json.loads(facts.data_json)
+        
+    except Exception as e:
+        print(f"Error retrieving company facts: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to retrieve company facts: {str(e)}"}
+        )
+
+@router.get("/sec/company-metrics/{cik}")
+def get_company_metrics(cik: str, form_type: str = "10-Q", db: Session = Depends(get_sec_db)):
+    """
+    Extract specific metrics from company facts data for a particular form type
+    This endpoint provides a compatibility layer that extracts metrics in the same
+    format as the original filtered data approach
+    """
+    try:
+        # Normalize CIK
+        unpadded_cik = cik.lstrip('0')
+        
+        # Retrieve the complete company facts
+        facts = db.query(SECFilingData).filter(
+            SECFilingData.cik == unpadded_cik,
+            SECFilingData.data_type == 'SEC-CompanyFacts'
+        ).first()
+        
+        if not facts:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "No company facts found for this CIK"}
+            )
+            
+        data = json.loads(facts.data_json)
+        
+        # Get company information
+        company_info = {
+            'name': data.get('entityName', 'Unknown'),
+            'cik': data.get('cik', 'Unknown')
+        }
+        
+        # Extract filings of the requested form type
+        filings_data = {}
+        
+        if 'facts' in data and 'us-gaap' in data['facts']:
+            # Process all concepts in the us-gaap taxonomy
+            for concept, concept_data in data['facts']['us-gaap'].items():
+                # Process each unit (USD, USD/shares, etc.)
+                for unit_type, units in concept_data.get('units', {}).items():
+                    for filing in units:
+                        if filing.get('form') == form_type:
+                            # Use accession number as unique identifier for the filing
+                            accn = filing.get('accn')
+                            if accn not in filings_data:
+                                filings_data[accn] = {
+                                    'accession_number': accn,
+                                    'filing_date': filing.get('filed'),
+                                    'report_date': filing.get('end'),
+                                    'fiscal_year': filing.get('fy'),
+                                    'fiscal_period': filing.get('fp'),
+                                    'data': {}
+                                }
+                            
+                            # Store the concept value
+                            if 'start' in filing:
+                                # This is a period value (like income)
+                                filings_data[accn]['data'][f"{concept}_{unit_type}_period"] = {
+                                    'value': filing.get('val'),
+                                    'start_date': filing.get('start'),
+                                    'end_date': filing.get('end'),
+                                    'unit': unit_type
+                                }
+                            else:
+                                # This is a point-in-time value (like assets)
+                                filings_data[accn]['data'][f"{concept}_{unit_type}"] = {
+                                    'value': filing.get('val'),
+                                    'date': filing.get('end'),
+                                    'unit': unit_type
+                                }
+        
+        # Convert to a list of filings
+        filings_list = []
+        for accn, filing_data in filings_data.items():
+            filing_data['company'] = company_info
+            filings_list.append(filing_data)
+        
+        # Sort by filing date (most recent first)
+        filings_list.sort(key=lambda x: x.get('filing_date', ''), reverse=True)
+        
+        if not filings_list:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"No {form_type} filings found for this CIK"}
+            )
+        
+        return {
+            "cik": cik,
+            "company_name": company_info['name'],
+            "total_filings": len(filings_list),
+            "filings": filings_list
+        }
+        
+    except Exception as e:
+        print(f"Error extracting metrics: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to extract metrics: {str(e)}"}
+        )
+
+@router.get("/sec/filing/{accession_number}")
+def get_filing_by_accession(accession_number: str, db: Session = Depends(get_sec_db)):
+    """
+    Retrieve a specific SEC filing by its accession number.
+    """
+    try:
+        # Simple query to get the filing data
+        filing = db.query(SECFilingData).filter(
+            SECFilingData.accession_number == accession_number
+        ).first()
+        
+        if not filing:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Filing not found: {accession_number}"}
+            )
+        
+        return json.loads(filing.data_json)
+    except Exception as e:
+        print(f"Error retrieving filing {accession_number}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to retrieve filing: {str(e)}"}
+        )
+
+@router.get("/sec/filing/{cik}")
+def get_sec_filing_data(cik: str, accession_number: str = None, db: Session = Depends(get_sec_db)):
+    """
+    Get SEC filing data for a company. If accession_number is provided, returns data for that specific filing.
+    Otherwise returns the most recent filing data.
+    """
+    try:
+        # Normalize CIK - remove leading zeros and ensure it's a string
+        unpadded_cik = str(int(cik))
+        
+        print(f"\nDebug - Filing request params:")
+        print(f"CIK: {cik}")
+        print(f"Unpadded CIK: {unpadded_cik}")
+        print(f"Accession Number: {accession_number}")
+        
+        # If accession number is provided, try to get the specific filing
+        if accession_number:
+            # First try XBRL data
+            query = db.query(SECFilingData).filter(
+                SECFilingData.cik == unpadded_cik,
+                SECFilingData.accession_number == accession_number,
+                SECFilingData.data_type == '10-Q-XBRL'
+            )
+            print(f"\nDebug - SQL Query (XBRL):")
+            print(str(query.statement.compile(compile_kwargs={"literal_binds": True})))
+            
+            filing = query.first()
+            
+            if filing:
+                return json.loads(filing.data_json)
+            
+            # If no XBRL data, try regular 10-Q data
+            query = db.query(SECFilingData).filter(
+                SECFilingData.cik == unpadded_cik,
+                SECFilingData.accession_number == accession_number,
+                SECFilingData.data_type == '10-Q'
+            )
+            print(f"\nDebug - SQL Query (10-Q):")
+            print(str(query.statement.compile(compile_kwargs={"literal_binds": True})))
+            
+            filing = query.first()
+            
+            if filing:
+                return json.loads(filing.data_json)
+            
+            # If no filing found, try to fetch it from SEC API
+            try:
+                # Fetch filing metadata from SEC API
+                padded_cik = unpadded_cik.zfill(10)
+                url = f"https://data.sec.gov/submissions/CIK{padded_cik}.json"
+                headers = {
+                    "User-Agent": "Private Research mike@roetto.org"
+                }
+                response = requests.get(url, headers=headers)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    recent_filings = data['filings']['recent']
+                    form_entries = recent_filings.get('form', [])
+                    accession_entries = recent_filings.get('accessionNumber', [])
+                    
+                    filing_index = None
+                    for i, acc_num in enumerate(accession_entries):
+                        if acc_num == accession_number and form_entries[i] == '10-Q':
+                            filing_index = i
+                            break
+                    
+                    if filing_index is not None:
+                        # Found the filing in SEC API, store it in our database
+                        filing_data = {
+                            'form': recent_filings['form'][filing_index],
+                            'accessionNumber': recent_filings['accessionNumber'][filing_index],
+                            'filingDate': recent_filings['filingDate'][filing_index],
+                            'reportDate': recent_filings['reportDate'][filing_index],
+                            'primaryDocument': recent_filings['primaryDocument'][filing_index] if 'primaryDocument' in recent_filings else None,
+                            'primaryDocDescription': recent_filings['primaryDocDescription'][filing_index] if 'primaryDocDescription' in recent_filings else None
+                        }
+                        
+                        # Store in database
+                        new_filing = SECFilingData(
+                            cik=unpadded_cik,
+                            accession_number=accession_number,
+                            data_type='10-Q',
+                            data_json=json.dumps(filing_data)
+                        )
+                        db.add(new_filing)
+                        db.commit()
+                        
+                        return filing_data
+            except Exception as e:
+                print(f"Error fetching filing from SEC API: {str(e)}")
+            
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"No filing found with accession number {accession_number}"}
+            )
+        
+        # Get the company facts data
+        facts = db.query(SECFilingData).filter(
+            SECFilingData.cik == unpadded_cik,
+            SECFilingData.data_type == 'SEC-CompanyFacts'
+        ).first()
+        
+        if not facts:
+            # Try the old format
+            facts = db.query(SECFilingData).filter(
+                SECFilingData.cik == unpadded_cik,
+                SECFilingData.accession_number == "all_facts"
+            ).first()
+            
+            if not facts:
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": "No SEC data found for this CIK"}
+                )
+            
+            # Update to new format
+            facts.data_type = 'SEC-CompanyFacts'
+            facts.accession_number = "company_facts"
+            db.commit()
+            
+        data = json.loads(facts.data_json)
+        
+        # Get company information
+        company_info = {
+            'name': data.get('entityName', 'Unknown'),
+            'cik': data.get('cik', 'Unknown')
+        }
+        
+        # Extract filings data
+        filings_data = {}
+        
+        if 'facts' in data and 'us-gaap' in data['facts']:
+            # Process all concepts in the us-gaap taxonomy
+            for concept, concept_data in data['facts']['us-gaap'].items():
+                # Process each unit (USD, USD/shares, etc.)
+                for unit_type, units in concept_data.get('units', {}).items():
+                    for filing in units:
+                        if filing.get('form') == '10-Q':
+                            # Use accession number as unique identifier for the filing
+                            accn = filing.get('accn')
+                            if accn not in filings_data:
+                                filings_data[accn] = {
+                                    'accession_number': accn,
+                                    'filing_date': filing.get('filed'),
+                                    'report_date': filing.get('end'),
+                                    'fiscal_year': filing.get('fy'),
+                                    'fiscal_period': filing.get('fp'),
+                                    'data': {}
+                                }
+                            
+                            # Store the concept value
+                            if 'start' in filing:
+                                # This is a period value (like income)
+                                filings_data[accn]['data'][f"{concept}_{unit_type}_period"] = {
+                                    'value': filing.get('val'),
+                                    'start_date': filing.get('start'),
+                                    'end_date': filing.get('end'),
+                                    'unit': unit_type
+                                }
+                            else:
+                                # This is a point-in-time value (like assets)
+                                filings_data[accn]['data'][f"{concept}_{unit_type}"] = {
+                                    'value': filing.get('val'),
+                                    'date': filing.get('end'),
+                                    'unit': unit_type
+                                }
+        
+        # Convert to a list of filings
+        filings_list = []
+        for accn, filing_data in filings_data.items():
+            filing_data['company'] = company_info
+            filings_list.append(filing_data)
+        
+        # Sort by filing date (most recent first)
+        filings_list.sort(key=lambda x: x.get('filing_date', ''), reverse=True)
+        
+        if not filings_list:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "No 10-Q filings found for this CIK"}
+            )
+        
+        return {
+            "cik": cik,
+            "company_name": company_info['name'],
+            "total_filings": len(filings_list),
+            "filings": filings_list
+        }
+        
+    except Exception as e:
+        print(f"Error retrieving SEC data: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to retrieve SEC data: {str(e)}"}
+        )
+
+@router.get("/sec/update/{cik}")
+def update_sec_data(cik: str, db: Session = Depends(get_sec_db)):
+    """
+    Fetch and update SEC filing data for a company, storing each 10-Q filing as a separate item keyed by accession number with detailed financial data.
+    """
+    try:
+        print(f"Starting SEC data update for CIK: {cik}")
+        # Ensure CIK is padded with leading zeros to 10 digits for API calls, but store unpadded in DB
+        unpadded_cik = cik.lstrip('0')
+        padded_cik = unpadded_cik.zfill(10)
+        
+        # Fetch all 10-Q filings from SEC submissions API
+        url = f"https://data.sec.gov/submissions/CIK{padded_cik}.json"
+        headers = {
+            "User-Agent": "Private Research mike@roetto.org"
+        }
+        print(f"Making request to SEC API: {url}")
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            return JSONResponse(
+                status_code=response.status_code,
+                content={"error": f"Failed to fetch data from SEC API. Status code: {response.status_code}"}
+            )
+        
+        data = response.json()
+        print(f"Successfully fetched SEC submissions data")
+        
+        # Extract all 10-Q filings
+        if 'filings' not in data or 'recent' not in data['filings']:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "No filings data found in SEC API response"}
+            )
+        
+        recent_filings = data['filings']['recent']
+        form_entries = recent_filings.get('form', [])
+        
+        # Find all indices where form is '10-Q'
+        ten_q_indices = [i for i, form in enumerate(form_entries) if form == '10-Q']
+        
+        if not ten_q_indices:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "No 10-Q filings found for this CIK"}
+            )
+        
+        # Fetch XBRL data for detailed financial information
+        xbrl_url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{padded_cik}.json"
+        print(f"Making request to SEC XBRL API: {xbrl_url}")
+        xbrl_response = requests.get(xbrl_url, headers=headers)
+        xbrl_data = None
+        if xbrl_response.status_code == 200:
+            xbrl_data = xbrl_response.json()
+            print(f"Successfully fetched XBRL data")
+        else:
+            print(f"Failed to fetch XBRL data: {xbrl_response.status_code}")
+        
+        # Get company information from XBRL data if available
+        company_info = {
+            'name': xbrl_data.get('entityName', 'Unknown') if xbrl_data else 'Unknown',
+            'cik': xbrl_data.get('cik', unpadded_cik) if xbrl_data else unpadded_cik
+        }
+        
+        # Process XBRL data to organize by filing if available
+        filings_data = {}
+        if xbrl_data and 'facts' in xbrl_data and 'us-gaap' in xbrl_data['facts']:
+            key_concepts = [
+                "Assets", "Liabilities", "StockholdersEquity", "NetIncomeLoss",
+                "EarningsPerShareBasic", "EarningsPerShareDiluted",
+                "CashAndCashEquivalentsAtCarryingValue",
+                "RevenueFromContractWithCustomerExcludingAssessedTax", "Revenue",
+                "OperatingIncomeLoss", "CostOfRevenue", "CostOfGoodsAndServicesSold",
+                "CostOfGoodsSold", "GrossProfit"
+            ]
+            for concept in key_concepts:
+                if concept not in xbrl_data['facts']['us-gaap']:
+                    continue
+                concept_data = xbrl_data['facts']['us-gaap'][concept]
+                for unit_type, units in concept_data.get('units', {}).items():
+                    for filing in units:
+                        if filing.get('form') == '10-Q':
+                            accn = filing.get('accn')
+                            if accn not in filings_data:
+                                filings_data[accn] = {
+                                    'accessionNumber': accn,
+                                    'filingDate': filing.get('filed', ''),
+                                    'reportDate': filing.get('end', ''),
+                                    'fiscal_year': filing.get('fy', ''),
+                                    'fiscal_period': filing.get('fp', ''),
+                                    'company': company_info,
+                                    'data': {}
+                                }
+                            if 'start' in filing:
+                                filings_data[accn]['data'][f"{concept}_{unit_type}_period"] = {
+                                    'value': filing.get('val'),
+                                    'start_date': filing.get('start'),
+                                    'end_date': filing.get('end'),
+                                    'unit': unit_type
+                                }
+                            else:
+                                filings_data[accn]['data'][f"{concept}_{unit_type}"] = {
+                                    'value': filing.get('val'),
+                                    'date': filing.get('end'),
+                                    'unit': unit_type
+                                }
+        
+        # Store each 10-Q filing individually with detailed data if available
+        stored_count = 0
+        for idx in ten_q_indices:
+            accession_number = recent_filings['accessionNumber'][idx]
+            filing_metadata = {
+                'form': recent_filings['form'][idx],
+                'accessionNumber': accession_number,
+                'filingDate': recent_filings['filingDate'][idx],
+                'reportDate': recent_filings['reportDate'][idx],
+                'primaryDocument': recent_filings['primaryDocument'][idx] if 'primaryDocument' in recent_filings else None,
+                'primaryDocDescription': recent_filings['primaryDocDescription'][idx] if 'primaryDocDescription' in recent_filings else None,
+                'document_url': f"https://www.sec.gov/Archives/edgar/data/{unpadded_cik}/{accession_number.replace('-', '')}/{recent_filings['primaryDocument'][idx]}" if 'primaryDocument' in recent_filings and recent_filings['primaryDocument'][idx] else None
+            }
+            
+            # Combine metadata with XBRL data if available for this filing
+            filing_data = filings_data.get(accession_number, filing_metadata)
+            if accession_number in filings_data:
+                filing_data.update(filing_metadata)
+                filing_data['company'] = company_info
+            else:
+                filing_data = filing_metadata
+            
+            # Check if filing already exists
+            existing = db.query(SECFilingData).filter(
+                SECFilingData.cik == unpadded_cik,
+                SECFilingData.accession_number == filing_data['accessionNumber'],
+                SECFilingData.data_type == '10-Q'
+            ).first()
+            
+            current_time = datetime.utcnow()
+            if existing:
+                # Update existing record
+                existing.data_json = json.dumps(filing_data)
+                existing.updated_at = current_time
+            else:
+                # Create new record
+                new_filing = SECFilingData(
+                    cik=unpadded_cik,
+                    accession_number=filing_data['accessionNumber'],
+                    data_type='10-Q',
+                    data_json=json.dumps(filing_data)
+                )
+                db.add(new_filing)
+                stored_count += 1
+        
+        try:
+            db.commit()
+            print(f"Successfully stored or updated {stored_count} new 10-Q filings")
+        except Exception as e:
+            db.rollback()
+            print(f"Database error while storing filings: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Failed to store filings: {str(e)}"}
+            )
+        
+        # Update company info timestamp
+        try:
+            company = db.query(SECCompanyInfo).filter(SECCompanyInfo.cik == unpadded_cik).first()
+            if company:
+                company.updated_at = datetime.utcnow()
+                db.commit()
+        except Exception as e:
+            print(f"Error updating company info timestamp: {str(e)}")
+            db.rollback()
+        
+        return {
+            "message": f"Successfully updated SEC data, stored or updated {stored_count} new 10-Q filings",
+            "total_filings": len(ten_q_indices)
+        }
+        
+    except Exception as e:
+        print(f"Error updating SEC data: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to update SEC data: {str(e)}"}
+        )
+
+@router.get("/charts/income-time-series")
+def get_income_time_series(db: Session = Depends(get_db)):
+    """Get monthly absolute income (dividends and realized gains) for the last 36 months."""
+    try:
+        query = text("""
+            SELECT
+              substr(date_new, 0, 8) AS m,
+              SUM(CASE WHEN xtype = 'Sell' THEN gain ELSE 0 END) AS realized_gains,
+              SUM(CASE WHEN xtype = 'Div' THEN units * price ELSE 0 END) AS dividends,
+              SUM(CASE WHEN xtype = 'Sell' THEN gain WHEN xtype = 'Div' THEN units * price ELSE 0 END) AS total_income
+            FROM transactions
+            WHERE date_new >= date('now','-36 months')
+            GROUP BY m
+            ORDER BY m
+        """)
+        result = db.execute(query)
+        return [{
+            "date": row[0],
+            "realized_gains": float(row[1]) if row[1] is not None else 0,
+            "dividends": float(row[2]) if row[2] is not None else 0,
+            "total_income": float(row[3]) if row[3] is not None else 0
+        } for row in result]
+    except Exception as e:
+        logging.error(f"Error in income-time-series endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve income time series data: {str(e)}")

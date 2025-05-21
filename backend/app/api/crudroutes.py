@@ -4,6 +4,7 @@ from sqlalchemy import text
 from typing import List
 from pydantic import BaseModel
 from datetime import date
+import logging
 
 from app.db.session import get_db
 from app.db import crud
@@ -102,3 +103,46 @@ def search_symbols(q: str = "", db: Session = Depends(get_db)):
         return symbols
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search symbols: {str(e)}")
+
+@router.delete("/securities/{symbol}")
+async def delete_security(symbol: str, db: Session = Depends(get_db)):
+    """Delete a security from the system"""
+    try:
+        # Check if security has any positions
+        check_positions = text("""
+            SELECT 1 FROM security_values 
+            WHERE symbol = :symbol AND shares > 0
+            LIMIT 1
+        """)
+        
+        has_positions = db.execute(check_positions, {"symbol": symbol}).fetchone()
+        
+        if has_positions:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot delete {symbol} - security has active positions"
+            )
+        
+        # Begin transaction
+        db.execute(text("BEGIN TRANSACTION"))
+        
+        # Delete from all related tables
+        tables = ["prices", "sectors", "asset_classes", "MPT", "dividends"]
+        
+        for table in tables:
+            delete_query = text(f"DELETE FROM {table} WHERE symbol = :symbol")
+            db.execute(delete_query, {"symbol": symbol})
+        
+        # Commit the transaction
+        db.execute(text("COMMIT"))
+        
+        return {"message": f"Security {symbol} deleted successfully"}
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Rollback in case of error
+        db.execute(text("ROLLBACK"))
+        logging.error(f"Error deleting security: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete security: {str(e)}")

@@ -11,6 +11,8 @@ from app.core.config import settings
 from app.api.routes import router as api_router
 from app.api.crudroutes import router as crud_router
 from app.api.dividend_routes import router as dividend_router
+from app.api.old_routes import router as old_routes_router
+from app.api.mptroutes import router as mpt_router
 from app.scheduler.config import initialize_scheduler, scheduler, load_job_states, save_job_states
 from app.scheduler.process_manager import register_shutdown_handlers, cleanup_scheduler_processes
 from .mpt_modeling import (
@@ -20,6 +22,7 @@ from .mpt_modeling import (
     list_repository_runs,
     get_repository_run
 )
+from app.api.secroutes import router as sec_router
 
 # Configure logging
 logging.basicConfig(
@@ -52,6 +55,9 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.include_router(api_router, prefix="/api")
 app.include_router(crud_router, prefix="/api/crud")
 app.include_router(dividend_router, prefix="/api")
+app.include_router(old_routes_router, prefix="/api")
+app.include_router(sec_router, prefix="/api")
+app.include_router(mpt_router, prefix="/api")
 
 class OptimizationRequest(BaseModel):
     gamma: Optional[float] = None
