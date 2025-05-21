@@ -5,7 +5,7 @@
  * With assistance from Claude (Anthropic)
  */
 import React, { useEffect, useState } from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
 const COLORS = [
     '#a50026', //1
@@ -40,9 +40,16 @@ function combineSmallSlices(data: PieData[], thresholdPercent: number): PieData[
   ];
 }
 
+interface TimeSeriesData {
+  date: string;
+  dividends: number;
+  realized_gains: number;
+}
+
 const IncomeCharts: React.FC = () => {
   const [dividends, setDividends] = useState<PieData[]>([]);
   const [realizedGains, setRealizedGains] = useState<PieData[]>([]);
+  const [timeSeriesData, setTimeSeriesData] = useState<TimeSeriesData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,10 +58,17 @@ const IncomeCharts: React.FC = () => {
     Promise.all([
       fetch('/api/charts/cumulative-dividends').then(r => r.json()),
       fetch('/api/charts/cumulative-realized-gains').then(r => r.json()),
+      fetch('/api/charts/income-time-series').then(r => r.json()),
     ])
-      .then(([divs, gains]) => {
+      .then(([divs, gains, timeSeries]) => {
         setDividends((divs as PieData[]).filter((d: PieData) => d.value > 0));
         setRealizedGains((gains as PieData[]).filter((g: PieData) => g.value > 0));
+        const formattedTimeSeries = Array.isArray(timeSeries) ? timeSeries.map(item => ({
+          date: item.date,
+          dividends: Number(item.dividends) || 0,
+          realized_gains: Number(item.realized_gains) || 0
+        })) : [];
+        setTimeSeriesData(formattedTimeSeries);
         setLoading(false);
       })
       .catch(e => {
@@ -104,7 +118,7 @@ const IncomeCharts: React.FC = () => {
   return (
     <div className="py-6">
       <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Income Charts</h1>
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-6 mb-6">
         <div className="bg-gray-100 dark:bg-gray-800/90 rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
           <div className="p-4">
             <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Cumulative Dividends by Symbol</h2>
@@ -116,7 +130,6 @@ const IncomeCharts: React.FC = () => {
                   nameKey="symbol"
                   cx="50%"
                   cy="50%"
-                
                   outerRadius={155}
                   labelLine={true}
                   label={renderCustomizedLabel}
@@ -153,6 +166,30 @@ const IncomeCharts: React.FC = () => {
               </PieChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+      <div className="bg-gray-100 dark:bg-gray-800/90 rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+        <div className="p-4">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Income Over Time</h2>
+          <ResponsiveContainer width="100%" height={450}>
+            <BarChart data={timeSeriesData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="date" 
+                tickFormatter={(date) => new Date(date).toLocaleDateString()}
+              />
+              <YAxis 
+                tickFormatter={(value) => `$${value.toLocaleString()}`}
+              />
+              <Tooltip 
+                formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                labelFormatter={(date) => new Date(date).toLocaleDateString()}
+              />
+              <Legend />
+              <Bar dataKey="dividends" name="Dividends" stackId="a" fill="#4574b3" />
+              <Bar dataKey="realized_gains" name="Realized Gains" stackId="a" fill="#d62f27" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

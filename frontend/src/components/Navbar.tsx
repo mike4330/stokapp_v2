@@ -236,6 +236,14 @@ const ButtonizedNavbar: React.FC = () => {
                     >
                       Securities
                     </Link>
+                    <Link
+                      to="/settings/data-enrichment"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsSettingsOpen(false)}
+                    >
+                      Data Enrichment
+                    </Link>
                   </div>
                 </div>
               )}
