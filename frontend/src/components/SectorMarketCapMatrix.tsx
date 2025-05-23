@@ -83,20 +83,24 @@ const SectorMarketCapMatrix: React.FC = () => {
     
     // Different blue shades based on concentration level
     if (marketCap === 'large') {
-      if (count >= 4) return 'bg-blue-800';
-      if (count >= 2) return 'bg-blue-600';
-      return 'bg-blue-400';
+      if (count >= 3) return 'bg-blue-900';
+      if (count >= 2) return 'bg-blue-800';
+      return 'bg-blue-600';
     } else if (marketCap === 'medium') {
-      if (count >= 3) return 'bg-blue-800';
-      if (count >= 2) return 'bg-blue-600';
-      return 'bg-blue-400';
+      if (count >= 3) return 'bg-blue-900';
+      if (count >= 2) return 'bg-blue-800';
+      return 'bg-blue-600';
     } else if (marketCap === 'small') {
-      if (count >= 3) return 'bg-blue-800';
-      if (count >= 2) return 'bg-blue-600';
-      return 'bg-blue-400';
+      if (count >= 3) return 'bg-blue-900';
+      if (count >= 2) return 'bg-blue-800';
+      return 'bg-blue-600';
     }
     
     return 'bg-gray-200 dark:bg-gray-600';
+  };
+
+  const shouldUseWhiteText = (color: string) => {
+    return ['bg-blue-900', 'bg-blue-700', 'bg-blue-600'].includes(color);
   };
 
   if (loading) {
@@ -140,9 +144,9 @@ const SectorMarketCapMatrix: React.FC = () => {
           {data.map((row, index) => (
             <tr key={index}>
               <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700">{row.sector}</td>
-              <td className={`px-4 py-2 text-center text-sm ${getCellColor(row.large, 'large') === 'bg-blue-800' || getCellColor(row.large, 'large') === 'bg-blue-600' ? 'text-white' : 'text-gray-900 dark:text-gray-100'} border border-gray-200 dark:border-gray-700 ${getCellColor(row.large, 'large')}`}>{row.large}</td>
-              <td className={`px-4 py-2 text-center text-sm ${getCellColor(row.medium, 'medium') === 'bg-blue-800' || getCellColor(row.medium, 'medium') === 'bg-blue-600' ? 'text-white' : 'text-gray-900 dark:text-gray-100'} border border-gray-200 dark:border-gray-700 ${getCellColor(row.medium, 'medium')}`}>{row.medium}</td>
-              <td className={`px-4 py-2 text-center text-sm ${getCellColor(row.small, 'small') === 'bg-blue-800' || getCellColor(row.small, 'small') === 'bg-blue-600' ? 'text-white' : 'text-gray-900 dark:text-gray-100'} border border-gray-200 dark:border-gray-700 ${getCellColor(row.small, 'small')}`}>{row.small}</td>
+              <td className={`px-4 py-2 text-center text-sm ${shouldUseWhiteText(getCellColor(row.large, 'large')) ? 'text-white' : 'text-gray-900 dark:text-gray-100'} border border-gray-200 dark:border-gray-700 ${getCellColor(row.large, 'large')}`}>{row.large}</td>
+              <td className={`px-4 py-2 text-center text-sm ${shouldUseWhiteText(getCellColor(row.medium, 'medium')) ? 'text-white' : 'text-gray-900 dark:text-gray-100'} border border-gray-200 dark:border-gray-700 ${getCellColor(row.medium, 'medium')}`}>{row.medium}</td>
+              <td className={`px-4 py-2 text-center text-sm ${shouldUseWhiteText(getCellColor(row.small, 'small')) ? 'text-white' : 'text-gray-900 dark:text-gray-100'} border border-gray-200 dark:border-gray-700 ${getCellColor(row.small, 'small')}`}>{row.small}</td>
             </tr>
           ))}
           <tr className="font-semibold bg-gray-50 dark:bg-gray-800">
@@ -157,4 +161,4 @@ const SectorMarketCapMatrix: React.FC = () => {
   );
 };
 
-export default SectorMarketCapMatrix; 
+export default SectorMarketCapMatrix;

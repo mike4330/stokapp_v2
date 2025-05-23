@@ -71,6 +71,9 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
   const [symbolInput, setSymbolInput] = useState('');
   const [symbolSuggestions, setSymbolSuggestions] = useState<string[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [allSymbols, setAllSymbols] = useState<string[]>([]);
+  const [selectedLots, setSelectedLots] = useState<Set<number>>(new Set());
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   // Calculate min and max basis values from the data
   const { minBasis, maxBasis } = useMemo(() => {
@@ -92,16 +95,24 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
     console.log('Starting to fetch lots...');
     try {
       setIsLoading(true);
-      const response = await axios.get('/api/open-lots');
-      console.log('Received lots data:', response.data);
-      console.log('Current lots count:', lots.length);
-      console.log('New lots count:', response.data.length);
       
-      setLots(response.data);
+      // Fetch lots and symbols in parallel
+      const [lotsResponse, symbolsResponse] = await Promise.all([
+        axios.get('/api/open-lots'),
+        axios.get<string[]>('/api/crud/symbols')
+      ]);
+      
+      console.log('Received lots data:', lotsResponse.data);
+      console.log('Received symbols data:', symbolsResponse.data.length, 'symbols');
+      console.log('Current lots count:', lots.length);
+      console.log('New lots count:', lotsResponse.data.length);
+      
+      setLots(lotsResponse.data);
+      setAllSymbols(symbolsResponse.data);
       
       // Initialize basis filter to minimum value if we have data
-      if (response.data.length > 0) {
-        const minBasis = Math.floor(Math.min(...response.data
+      if (lotsResponse.data.length > 0) {
+        const minBasis = Math.floor(Math.min(...lotsResponse.data
           .map((lot: OpenLot) => lot.lot_basis)
           .filter((basis: number | null): basis is number => basis !== null)));
         console.log('Setting new basis filter:', minBasis);
@@ -140,7 +151,7 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
     }
   };
 
-  // Symbol autocomplete setup using downshift
+  // Symbol autocomplete setup using downshift with LOCAL FILTERING
   const {
     isOpen: isComboboxOpen,
     getMenuProps,
@@ -151,15 +162,16 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
   } = useCombobox({
     items: symbolSuggestions,
     inputValue: symbolInput,
-    onInputValueChange: async ({ inputValue }) => {
+    onInputValueChange: ({ inputValue }) => {
       setSymbolInput(inputValue || '');
       if (inputValue) {
-        try {
-          const response = await axios.get<string[]>(`/api/crud/symbols/search?q=${inputValue}`);
-          setSymbolSuggestions(response.data);
-        } catch (error) {
-          setSymbolSuggestions([]);
-        }
+        // LOCAL FILTERING - no API call!
+        const filtered = allSymbols
+          .filter(symbol => 
+            symbol.toUpperCase().includes(inputValue.toUpperCase())
+          )
+          .slice(0, 10); // Limit results
+        setSymbolSuggestions(filtered);
       } else {
         setSymbolSuggestions([]);
       }
@@ -241,8 +253,8 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
     return validPL.length > 0 ? Math.max(...validPL) : 10;
   }, [filteredLots]);
 
-  // Helper to map pl_pct to palette index
-  function getViridisColor(pl_pct: number | null): string {
+  // Helper to map pl_pct to palette index (arrow function to avoid strict mode issues)
+  const getViridisColor = (pl_pct: number | null): string => {
     if (pl_pct === null || pl_pct < 10) return 'transparent';
     const min = 10;
     const max = maxPLPct;
@@ -252,10 +264,10 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
       Math.floor(((pl_pct - min) / (max - min)) * (viridisPalette.length - 1))
     );
     return viridisPalette[idx];
-  }
+  };
 
-  // Helper to determine text color for contrast
-  function getTextColor(bgColor: string): string {
+  // Helper to determine text color for contrast (arrow function to avoid strict mode issues)
+  const getTextColor = (bgColor: string): string => {
     if (bgColor === 'transparent') return 'inherit';
     // Simple luminance check
     const hex = bgColor.replace('#', '');
@@ -265,7 +277,55 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
     // Perceived luminance formula
     const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     return luminance > 0.6 ? '#222' : '#fff';
-  }
+  };
+
+  // Add new handlers for checkbox functionality
+  const handleSelectLot = (lotId: number) => {
+    setSelectedLots(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(lotId)) {
+        newSet.delete(lotId);
+      } else {
+        newSet.add(lotId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedLots.size === filteredLots.length) {
+      setSelectedLots(new Set());
+    } else {
+      setSelectedLots(new Set(filteredLots.map(lot => lot.id)));
+    }
+  };
+
+  const handleBulkClose = () => {
+    setShowConfirmDialog(true);
+  };
+
+  const confirmBulkClose = async () => {
+    const lotsToClose = lots.filter(lot => selectedLots.has(lot.id));
+    const lotIdsToClose = lotsToClose.map(lot => lot.id);
+    try {
+      setIsLoading(true);
+      await axios.post('/api/crud/close-lots', { lotIds: lotIdsToClose });
+      setSelectedLots(new Set());
+      setShowConfirmDialog(false);
+      // Refresh the lots after closing
+      await fetchLots();
+    } catch (err) {
+      console.error('Failed to close lots:', err);
+      setError('Failed to close selected lots');
+      setShowConfirmDialog(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const cancelBulkClose = () => {
+    setShowConfirmDialog(false);
+  };
 
   // Loading spinner display while fetching data
   if (isLoading) {
@@ -288,6 +348,58 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
   return (
     <div className="container mx-auto px-2 py-4">
       <h1 className="text-xl font-bold text-gray-800 dark:text-gray-200">Open Lots Manager</h1>
+      {/* Add bulk close button when lots are selected */}
+      {selectedLots.size > 0 && (
+        <div className="mt-2 mb-4">
+          <button
+            onClick={handleBulkClose}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+          >
+            Close {selectedLots.size} Selected Lot{selectedLots.size !== 1 ? 's' : ''}
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Confirm Close Lots
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-4">
+              Are you sure you want to close the following {selectedLots.size} lots?
+            </p>
+            <div className="max-h-48 overflow-y-auto mb-4 p-2 border border-gray-200 dark:border-gray-700 rounded">
+              <ul className="list-disc list-inside text-gray-600 dark:text-gray-300">
+                {Array.from(selectedLots).map(lotId => {
+                  const lot = lots.find(l => l.id === lotId);
+                  return (
+                    <li key={lotId} className="mb-1">
+                      Lot #{lotId} - {lot?.symbol || 'Unknown'} ({lot?.units_remaining || 0} units)
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={cancelBulkClose}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkClose}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                Close {selectedLots.size} Lots
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Drilldown chip below title */}
       {symbolDrilldown && (
         <div className="mt-2 mb-4 flex items-center gap-2">
@@ -435,6 +547,14 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
           {/* Table header with sortable columns */}
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
+              <th className="px-2 py-2 w-8">
+                <input
+                  type="checkbox"
+                  checked={selectedLots.size === filteredLots.length && filteredLots.length > 0}
+                  onChange={handleSelectAll}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              </th>
               {[
                 // Column definitions with fixed widths for responsive layout
                 { field: 'id' as const, label: 'ID', className: 'w-12' },
@@ -470,6 +590,15 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
                 key={lot.id}
                 className="hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
               >
+                <td className="px-2 py-2 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={selectedLots.has(lot.id)}
+                    onChange={() => handleSelectLot(lot.id)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </td>
                 <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {lot.id}
                 </td>

@@ -22,6 +22,9 @@ class TransactionCreate(BaseModel):
 class TransactionUpdate(TransactionCreate):
     gain: float = None
 
+class BulkCloseLotsRequest(BaseModel):
+    lotIds: List[int]
+
 # Create a router instance
 router = APIRouter()
 
@@ -104,6 +107,17 @@ def search_symbols(q: str = "", db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search symbols: {str(e)}")
 
+@router.get("/symbols")
+def get_all_symbols(db: Session = Depends(get_db)):
+    """Get all symbols for local filtering"""
+    try:
+        query = text("SELECT DISTINCT symbol FROM prices ORDER BY symbol")
+        result = db.execute(query)
+        symbols = [row[0] for row in result]
+        return symbols
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve symbols: {str(e)}")
+
 @router.delete("/securities/{symbol}")
 async def delete_security(symbol: str, db: Session = Depends(get_db)):
     """Delete a security from the system"""
@@ -146,3 +160,49 @@ async def delete_security(symbol: str, db: Session = Depends(get_db)):
         db.execute(text("ROLLBACK"))
         logging.error(f"Error deleting security: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete security: {str(e)}")
+
+@router.post("/close-lots")
+def close_lots(body: dict, db: Session = Depends(get_db)):
+    """Close multiple lots by updating transactions with disposition='sold'"""
+    try:
+        logging.info(f"Received request body: {body}")
+        lot_ids = body.get('lotIds', [])
+        if not lot_ids:
+            logging.error("No lot IDs provided in request")
+            raise HTTPException(status_code=400, detail="No lot IDs provided")
+
+        logging.info(f"Attempting to close lots with IDs: {lot_ids}")
+        # Begin transaction
+        db.execute(text("BEGIN TRANSACTION"))
+        
+        # Update transactions to mark them as sold
+        # Create placeholders for IN clause matching the number of IDs
+        placeholders = ','.join([':id_' + str(i) for i in range(len(lot_ids))])
+        update_query = text(f"""
+            UPDATE transactions
+            SET disposition = 'sold'
+            WHERE id IN ({placeholders})
+            AND (disposition IS NULL OR disposition != 'sold')
+        """)
+        # Create parameter dictionary for each ID
+        params = {f'id_{i}': lot_id for i, lot_id in enumerate(lot_ids)}
+        result = db.execute(update_query, params)
+        
+        logging.info(f"Update query executed, affected rows: {result.rowcount}")
+        # Commit the transaction
+        db.execute(text("COMMIT"))
+        
+        if result.rowcount == 0:
+            logging.warning("No open lots found with the provided IDs or they are already closed")
+            raise HTTPException(status_code=404, detail="No open lots found with the provided IDs or they are already closed")
+
+        logging.info(f"Successfully closed {result.rowcount} lots")
+        return {"message": f"Successfully closed {result.rowcount} lots"}
+    except HTTPException as he:
+        logging.error(f"HTTP Exception occurred: {str(he)}")
+        raise
+    except Exception as e:
+        db.rollback()
+        error_detail = str(e)
+        logging.error(f"Unexpected error while closing lots: {error_detail}")
+        raise HTTPException(status_code=500, detail=f"Failed to close lots: {error_detail}")

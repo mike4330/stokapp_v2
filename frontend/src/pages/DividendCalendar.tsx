@@ -61,6 +61,9 @@ const DividendCalendar: React.FC = () => {
         setLoading(true);
         const [year, month] = selectedMonth.split('-');
         const startDate = `${year}-${month}-01`;
+        // When using day 0, we get the last day of the previous month
+        // Since month is 1-based (from YYYY-MM format) and we want the last day of the current month,
+        // we can use the current month number directly (e.g., month=3 gives us the last day of March)
         const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
         const endDate = `${year}-${month}-${lastDay}`;
         
@@ -72,7 +75,10 @@ const DividendCalendar: React.FC = () => {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           filteredPayments = response.data.filter(payment => {
-            const paymentDate = new Date(payment.payment_date);
+            // Ensure consistent date handling by creating a date without time component
+            // This fixes potential timezone issues when parsing date strings
+            const [year, month, day] = payment.payment_date.split('T')[0].split('-').map(Number);
+            const paymentDate = new Date(year, month - 1, day);
             paymentDate.setHours(0, 0, 0, 0);
             return paymentDate >= today;
           });
@@ -208,7 +214,12 @@ const DividendCalendar: React.FC = () => {
             <div key={date} className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
               <div className="bg-gray-100 dark:bg-gray-700 px-4 py-2 flex justify-between items-center">
                 <h3 className="font-medium text-gray-800 dark:text-gray-200">
-                  {new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {(() => {
+                    // Parse the date with timezone handling
+                    const [year, month, day] = date.split('T')[0].split('-').map(Number);
+                    const paymentDate = new Date(year, month - 1, day);
+                    return paymentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                  })()}
                 </h3>
                 <span 
                   className="text-sm font-medium px-2 py-1 rounded"
