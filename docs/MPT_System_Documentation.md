@@ -1,15 +1,24 @@
 # MPT Modeling System Documentation
 
 ## Overview
-This system implements Modern Portfolio Theory (MPT) optimization for portfolio management. It consists of a React-based frontend and a Python FastAPI backend, providing portfolio optimization capabilities with various objectives and constraints.
+This system implements Modern Portfolio Theory (MPT) optimization for portfolio management. It consists of a React-based frontend and a Python FastAPI backend, providing portfolio optimization capabilities with various objectives and constraints. The system dynamically loads symbols from the database and supports real-time data refresh from Yahoo Finance.
+
+## Key Features
+- **Dynamic Symbol Loading**: Automatically includes all securities with target allocations > 0 from the MPT database table
+- **Real-time Data Refresh**: Optional fresh data download from Yahoo Finance
+- **Multiple Optimization Objectives**: Maximum Sharpe, minimum volatility, efficient frontier targets
+- **Sector Constraints**: Configurable sector allocation bounds with FBonds/DBonds support
+- **Asynchronous Processing**: Background task execution with status polling
+- **Comprehensive Debugging**: Detailed optimization information and data source tracking
 
 ## System Components
 
 ### Frontend Components
 - `frontend/src/pages/MPTModelling.tsx`: Main React component for the MPT modeling interface
   - Handles user input for optimization parameters
-  - Displays optimization results and debug information
+  - Displays optimization results with interactive bar charts
   - Manages real-time data refresh and task status polling
+  - Shows data source information (database vs static files)
 
 ### Backend Components
 - `backend/app/mpt_modeling.py`: FastAPI endpoint handlers and task management
@@ -18,9 +27,11 @@ This system implements Modern Portfolio Theory (MPT) optimization for portfolio 
   - Handles parameter validation
 
 - `backend/app/portfolio_optimization.py`: Core optimization engine
-  - Implements portfolio optimization algorithms
+  - Implements portfolio optimization algorithms using PyPortfolioOpt
+  - Dynamic symbol loading from MPT database table
   - Handles data management and caching
-  - Provides comprehensive error handling and logging
+  - FBonds/DBonds sector mapping kludge
+  - Comprehensive error handling and logging
 
 ## API Endpoints
 
@@ -50,7 +61,8 @@ Initiates a new portfolio optimization task.
 **Response:**
 ```json
 {
-  "task_id": string
+  "task_id": string,
+  "message": "MPT modeling task initiated"
 }
 ```
 
@@ -68,230 +80,232 @@ Retrieves the status of an optimization task.
     "sharpe_ratio": number,
     "sector_weights": { [sector: string]: number },
     "debug_info": {
-      // Debug information object
+      "config_files": {
+        "status": "success" | "error",
+        "data_source": "database",
+        "tickers_count": number,
+        "sectors_count": number,
+        "query_info": {
+          "symbols_with_allocation": number,
+          "sectors_mapped": number
+        },
+        "fbonds_dbonds_overrides": {
+          [symbol: string]: "FBonds" | "DBonds"
+        }
+      },
+      "optimization": {
+        "status": "success" | "error",
+        "solver_status": "optimal" | "infeasible",
+        "data_shape": string,
+        "data_info": {
+          "missing_tickers": string[],
+          "price_range": {
+            "start": string,
+            "end": string
+          }
+        }
+      }
     }
   } | null,
   "error": string | null
 }
 ```
 
-## Configuration Files
+### GET `/api/mpt/symbols-with-allocation`
+Returns symbols with target allocations from the MPT table.
 
-### `backend/app/config/tickers.txt`
-Contains the list of tickers used in the optimization.
+**Response:**
+```json
+[
+  {
+    "symbol": string,
+    "target_alloc": number
+  }
+]
+```
 
-### `backend/app/config/sectormap.txt`
-Maps tickers to their respective sectors.
+### GET `/api/mpt`
+Returns symbol and sector mapping from MPT table.
+
+**Response:**
+```json
+[
+  {
+    "symbol": string,
+    "sector": string
+  }
+]
+```
+
+## Dynamic Symbol Management
+
+### Database-Driven Symbol Loading
+The system now dynamically loads symbols from the database instead of static configuration files:
+
+1. **Query**: `SELECT symbol, target_alloc FROM MPT WHERE target_alloc > 0`
+2. **Automatic Inclusion**: Any symbol with a target allocation > 0 is automatically included
+3. **No Manual Maintenance**: No need to update static `tickers.txt` file
+4. **Real-time Updates**: New symbols with allocations are immediately available
+
+### Sector Mapping
+Sector mappings are loaded from the database with a special kludge for bonds:
+
+1. **Primary Source**: Database `MPT.sector` field
+2. **FBonds/DBonds Override**: Text file `sectormap.txt` provides FBonds/DBonds mappings
+3. **Automatic Override**: Symbols mapped to "Bonds" in database get overridden with FBonds/DBonds from text file
 
 ## Data Management
-- Historical price data is stored in `backend/app/pricedataset.csv`
-- Data can be refreshed from Yahoo Finance on demand
-- Requests are cached using `requests_cache`
+
+### Price Data Cache
+- **Location**: `backend/app/pricedataset.csv`
+- **Content**: Historical price data for all symbols with target allocations
+- **Size**: ~2.5MB with 10 years of daily data
+- **Update**: Refreshed when `refreshData: true` or cache missing
+
+### Data Refresh Process
+1. **Check Cache**: System first tries to load from `pricedataset.csv`
+2. **Missing Symbols**: Identifies symbols without price data
+3. **Refresh Option**: User can force fresh download from Yahoo Finance
+4. **Automatic Handling**: Missing cache triggers automatic download
+
+### Missing Data Handling
+- **Detection**: System identifies symbols without price data
+- **Reporting**: Missing symbols listed in debug information
+- **Filtering**: Optimization excludes symbols without price data
+- **User Notification**: Debug panel shows data source and missing symbols
+
+## Sector Constraints & FBonds/DBonds Kludge
+
+### The Challenge
+- **Database**: Stores all bonds as "Bonds" sector
+- **Optimization**: Expects separate "FBonds" and "DBonds" sectors
+- **Constraints**: Default sector constraints reference FBonds/DBonds
+
+### The Solution
+1. **Load from Database**: Get all symbols and their "Bonds" sector
+2. **Read Text File**: Parse `sectormap.txt` for FBonds/DBonds mappings
+3. **Apply Overrides**: Update specific symbols from "Bonds" to "FBonds"/"DBonds"
+4. **Debug Tracking**: Record which symbols were overridden
+
+### Override Mapping
+Currently 10 symbols get overridden:
+- **FBonds**: JPIB, BNDX, PGHY (3 symbols)
+- **DBonds**: ANGL, FAGIX, FNBGX, LKOR, SJNK, TDTF, VCSH (7 symbols)
+
+## Configuration Files (Legacy Support)
+
+### `backend/app/config/sectormap.txt`
+Used only for FBonds/DBonds sector overrides. Format:
+```
+SYMBOL,SECTOR
+ANGL,DBonds
+JPIB,FBonds
+...
+```
+
+### `backend/app/config/tickers.txt` 
+**DEPRECATED**: No longer used for symbol loading. Symbols now loaded dynamically from database.
 
 ## Optimization Features
-- Multiple optimization objectives:
-  - Maximum Sharpe ratio
-  - Minimum volatility
-  - Efficient frontier (risk/return targets)
-- Sector constraints
-- L2 regularization
-- Weight bounds
-- Comprehensive error handling and debugging
+
+### Optimization Objectives
+- **Maximum Sharpe Ratio**: Maximize risk-adjusted returns
+- **Minimum Volatility**: Minimize portfolio risk
+- **Efficient Risk**: Target specific volatility level
+- **Efficient Return**: Target specific return level
+
+### Constraints
+- **Weight Bounds**: Individual asset minimum/maximum weights
+- **Sector Constraints**: Sector-level allocation bounds
+- **L2 Regularization**: Optional regularization parameter (gamma)
+- **Sum to One**: Portfolio weights sum to 100%
+
+### Solver Details
+- **Engine**: PyPortfolioOpt with CVXPY backend
+- **Solver**: OSQP (Operator Splitting Quadratic Program)
+- **Status Tracking**: Optimal/infeasible solution detection
+- **Performance**: Typical solve time under 1 second
 
 ## Logging
-- Detailed logging implemented in `portfolio_optimization.py`
-- Logs stored in `backend/app/logs/portfolio_optimization.log`
-- Rotating file handler with 10MB per file, 5 backup files
+- **Location**: `backend/app/logs/portfolio_optimization.log`
+- **Format**: Timestamped with detailed debugging information
+- **Rotation**: 10MB per file, 5 backup files
+- **Content**: Symbol loading, optimization progress, sector overrides, errors
 
-## MPT Modeling Component Details
+## Frontend Features
 
-### Component Overview
-The MPT Modeling component (`MPTModelling.tsx`) is a React component that provides a user interface for portfolio optimization using Modern Portfolio Theory. It allows users to configure optimization parameters, view results, and monitor the optimization process.
+### Interactive Results Display
+- **Bar Chart**: Sortable weight visualization with Recharts
+- **Weight Table**: Sortable grid of all portfolio weights
+- **Performance Metrics**: Expected return, volatility, Sharpe ratio
+- **Sector Allocations**: Breakdown by sector when constraints used
 
-### Component Structure
+### Debug Information Panel
+- **Data Source**: Shows "database" vs "static files"
+- **Symbol Count**: Number of symbols loaded and used
+- **Missing Data**: Lists symbols without price data
+- **Sector Overrides**: Count of FBonds/DBonds overrides applied
+- **Optimization Status**: Solver results and performance
 
-#### State Management
-```typescript
-// Core optimization parameters
-const [gamma, setGamma] = useState('1.98');
-const [targetReturn, setTargetReturn] = useState('0.07');
-const [targetRisk, setTargetRisk] = useState('0.1286');
-const [lowerBound, setLowerBound] = useState('0.00131');
-const [upperBound, setUpperBound] = useState('0.0482');
-const [objective, setObjective] = useState('max_sharpe');
+### User Controls
+- **Refresh Data Toggle**: Force Yahoo Finance data download
+- **Sector Constraints**: Enable/disable with configurable bounds
+- **Parameter Inputs**: All optimization parameters with validation
+- **Save to Repository**: Store optimization results
 
-// Feature toggles and constraints
-const [useSectorConstraints, setUseSectorConstraints] = useState(false);
-const [refreshData, setRefreshData] = useState(false);
-const [sectorConstraints, setSectorConstraints] = useState<SectorConstraints>(DEFAULT_SECTOR_CONSTRAINTS);
+## Error Handling
 
-// Task management and results
-const [modelingResult, setModelingResult] = useState<ModelingResult | null>(null);
-const [modelingLoading, setModelingLoading] = useState(false);
-const [modelingError, setModelingError] = useState<string | null>(null);
-const [taskId, setTaskId] = useState<string | null>(null);
-```
+### Data Issues
+- **Missing Symbols**: Graceful handling of symbols without price data
+- **Invalid Constraints**: Validation of sector constraint consistency
+- **Database Errors**: Fallback error messages for database connection issues
 
-### Key Interfaces
+### Optimization Failures
+- **Infeasible Problems**: Clear error messages for impossible constraints
+- **Solver Errors**: Detailed solver status reporting
+- **Timeout Handling**: Background task timeout management
 
-#### OptimizationConstraints
-```typescript
-interface OptimizationConstraints {
-  gamma: number;
-  target_return: number;
-  lower_bound: number;
-  upper_bound: number;
-  refresh_data: boolean;
-  sector_lower: { [key: string]: number };
-  sector_upper: { [key: string]: number };
-}
-```
+### User Feedback
+- **Loading States**: Clear indication of long-running processes
+- **Error Messages**: User-friendly error descriptions
+- **Status Updates**: Real-time progress indication
 
-#### ModelingResult
-```typescript
-interface ModelingResult {
-  weights: { [key: string]: number };
-  expected_return: number;
-  volatility: number;
-  sharpe_ratio: number;
-  sector_weights: { [key: string]: number };
-  debug_info: OptimizationDebugInfo;
-}
-```
+## Performance Considerations
 
-### Features
+### Database Queries
+- **Optimized Queries**: Single queries for symbols and sectors
+- **Connection Management**: Proper database connection lifecycle
+- **Error Recovery**: Graceful handling of database unavailability
 
-#### 1. Optimization Parameter Configuration
-- Gamma (L2 regularization)
-- Target return and risk
-- Weight bounds
-- Optimization objective selection
-- Sector constraints
+### Data Caching
+- **Yahoo Finance Caching**: Requests cached to avoid rate limits
+- **Price Data Persistence**: CSV cache for historical data
+- **Selective Refresh**: Only download data when necessary
 
-#### 2. Data Management
-- Option to refresh data from Yahoo Finance
-- Data status monitoring
-- Cache management
+### Frontend Optimization
+- **Polling Strategy**: 2-second intervals for status checking
+- **State Management**: Efficient React state updates
+- **Chart Performance**: Optimized data preparation for visualizations
 
-#### 3. Task Management
-- Asynchronous task handling
-- Status polling
-- Error handling
-- Loading states
+## Future Improvements
 
-#### 4. Results Display
-- Portfolio weights
-- Performance metrics
-- Sector allocations
-- Debug information
+### Data Management
+1. **Database Price Storage**: Move from CSV to database storage
+2. **Incremental Updates**: Only download missing date ranges
+3. **Multiple Data Sources**: Support for additional price data providers
 
-### Key Functions
+### Sector Management
+1. **Database Schema Update**: Add separate FBonds/DBonds sectors to database
+2. **Sector Hierarchy**: Support for sector/subsector relationships
+3. **Dynamic Constraints**: Generate constraints from target allocations
 
-#### handleRunModeling
-```typescript
-const handleRunModeling = async () => {
-  // Initiates the optimization process
-  // Handles API communication and error states
-}
-```
+### User Experience
+1. **Real-time Validation**: Immediate feedback on constraint conflicts
+2. **Constraint Visualization**: Show feasible region graphically
+3. **Historical Comparison**: Compare current vs previous optimizations
 
-#### pollTaskStatus
-```typescript
-const pollTaskStatus = async (taskId: string) => {
-  // Polls the backend for task status
-  // Updates UI based on task progress
-}
-```
-
-#### handleSectorConstraintChange
-```typescript
-const handleSectorConstraintChange = (
-  sector: string,
-  type: 'min' | 'max',
-  value: string
-) => {
-  // Updates sector constraints
-}
-```
-
-### UI Sections
-
-#### 1. Parameter Input Form
-- Optimization objective selector
-- Numerical input fields for parameters
-- Validation and constraints
-
-#### 2. Sector Constraints Panel
-- Toggle for sector constraints
-- Grid of sector weight inputs
-- Min/max constraints per sector
-
-#### 3. Results Display
-- Performance metrics cards
-- Weight distribution tables
-- Debug information panel
-
-#### 4. Status and Controls
-- Run button with loading state
-- Data refresh toggle
-- Status messages
-- Error displays
-
-### Usage Example
-
-```tsx
-// In a parent component or page
-import MPTModelling from './pages/MPTModelling';
-
-function App() {
-  return (
-    <div className="app">
-      <MPTModelling />
-    </div>
-  );
-}
-```
-
-### Styling
-- Uses Tailwind CSS for styling
-- Responsive design
-- Dark mode support
-- Custom color scheme (green-based)
-
-### Error Handling
-1. Input Validation
-   - Numeric bounds checking
-   - Required field validation
-   - Constraint consistency
-
-2. API Error Handling
-   - Network errors
-   - Task failures
-   - Timeout handling
-
-3. User Feedback
-   - Error messages
-   - Loading states
-   - Status updates
-
-### Performance Considerations
-- Debounced input handling
-- Optimized re-renders
-- Efficient status polling
-- Cached API responses
-
-### Future Improvements
-1. Add visualization components
-   - Efficient frontier plot
-   - Weight distribution charts
-   - Performance attribution graphs
-
-2. Enhanced user interactions
-   - Drag-and-drop weight adjustment
-   - Interactive constraint setting
-   - Real-time validation
-
-3. Additional features
-   - Portfolio comparison
-   - Historical backtesting
-   - Custom asset groups 
+### Advanced Features
+1. **Risk Models**: Alternative risk model implementations
+2. **Transaction Costs**: Include trading costs in optimization
+3. **ESG Constraints**: Environmental/social/governance filters
+4. **Multi-Period Optimization**: Dynamic rebalancing strategies 
