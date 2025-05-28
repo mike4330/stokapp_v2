@@ -20,6 +20,7 @@ interface Transaction {
   acct: string;
   gain?: number | null;
   disposition?: string | null;
+  units_remaining?: number | null;
 }
 
 const LotManagerPage: React.FC = () => {
@@ -62,7 +63,8 @@ const LotManagerPage: React.FC = () => {
       xtype: 'Buy',
       units: lot.units || 0,
       price: lot.price || 0,
-      acct: lot.acct
+      acct: lot.acct,
+      units_remaining: lot.units_remaining || null
     };
     setSelectedTransaction(transaction);
     setIsModalOpen(true);

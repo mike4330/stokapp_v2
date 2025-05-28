@@ -33,6 +33,15 @@ interface OptimizationDebugInfo {
     error?: string;
     tickers_count: number;
     sectors_count: number;
+    data_source?: string;
+    query_info?: {
+      symbols_with_allocation: number;
+      sectors_mapped: number;
+    };
+    fbonds_dbonds_overrides?: {
+      [symbol: string]: string;
+    };
+    override_warning?: string;
   };
   optimization: {
     status: string;
@@ -663,11 +672,24 @@ const MPTModelling: React.FC = () => {
                             </div>
                           )}
                           <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Data source: {modelingResult.debug_info.config_files.data_source || 'static files'}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
                             Tickers loaded: {modelingResult.debug_info.config_files.tickers_count}
                           </div>
                           <div className="text-sm text-gray-600 dark:text-gray-400">
                             Sector mappings: {modelingResult.debug_info.config_files.sectors_count}
                           </div>
+                          {modelingResult.debug_info.config_files.query_info && (
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              Database query: {modelingResult.debug_info.config_files.query_info.symbols_with_allocation} symbols with allocation, {modelingResult.debug_info.config_files.query_info.sectors_mapped} sectors mapped
+                            </div>
+                          )}
+                          {modelingResult.debug_info.config_files.fbonds_dbonds_overrides && (
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              FBonds/DBonds overrides: {Object.keys(modelingResult.debug_info.config_files.fbonds_dbonds_overrides).length} symbols updated from text file
+                            </div>
+                          )}
                         </div>
                       </div>
 
