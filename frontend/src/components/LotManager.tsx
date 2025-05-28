@@ -2,7 +2,7 @@
  * Copyright (C) 2025 Mike Roetto <mike@roetto.org>
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * With assistance from Claude (Anthropic)
+ * With assistance from Claude (Anthropic) and Grok (xAI)
  */
 
 /**
@@ -348,18 +348,6 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
   return (
     <div className="container mx-auto px-2 py-4">
       <h1 className="text-xl font-bold text-gray-800 dark:text-gray-200">Open Lots Manager</h1>
-      {/* Add bulk close button when lots are selected */}
-      {selectedLots.size > 0 && (
-        <div className="mt-2 mb-4">
-          <button
-            onClick={handleBulkClose}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-          >
-            Close {selectedLots.size} Selected Lot{selectedLots.size !== 1 ? 's' : ''}
-          </button>
-        </div>
-      )}
-
       {/* Confirmation Dialog */}
       {showConfirmDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -541,6 +529,16 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
             </div>
           </div>
         </div>
+        {selectedLots.size > 0 && (
+          <div className="mt-2 sm:mt-0 sm:ml-4">
+            <button
+              onClick={handleBulkClose}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+            >
+              Close {selectedLots.size} Selected Lot{selectedLots.size !== 1 ? 's' : ''}
+            </button>
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
         <table className="w-full bg-white dark:bg-gray-800 shadow-md text-sm">

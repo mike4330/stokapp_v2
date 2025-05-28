@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from app.db.session import get_db
-from app.schemas.mpt import ModelRecommendation, MPTData
+from app.schemas.mpt import ModelRecommendation, MPTData, MPTSymbol
 from app.mpt_modeling import initiate_mpt_modeling, get_task_status
 
 router = APIRouter()
@@ -22,6 +22,17 @@ def get_mpt_data(db: Session = Depends(get_db)):
         return mpt_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT data: {str(e)}")
+
+@router.get("/mpt/symbols-with-allocation", response_model=List[MPTSymbol])
+def get_symbols_with_allocation(db: Session = Depends(get_db)):
+    """Get symbols with target_alloc > 0 from MPT table"""
+    try:
+        query = text("SELECT symbol, target_alloc FROM MPT WHERE target_alloc > 0 ORDER BY symbol")
+        result = db.execute(query)
+        symbols = [{"symbol": row[0], "target_alloc": row[1]} for row in result]
+        return symbols
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve symbols with allocation: {str(e)}")
 
 @router.get("/model-recommendations", response_model=List[ModelRecommendation])
 def get_model_recommendations(db: Session = Depends(get_db)):
