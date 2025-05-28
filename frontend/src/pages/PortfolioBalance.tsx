@@ -167,12 +167,24 @@ const PortfolioBalance: React.FC = () => {
 
       {/* Sector-MarketCap Distribution Section */}
       <div className="mb-8">
-        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">
-          Holdings by Sector & Market Cap
-        </h2>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <SectorMarketCapMatrix />
-        </div>
+        <details className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 group marker:content-none">
+          <summary className="cursor-pointer focus:outline-none list-none flex items-center justify-between">
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">
+              Holdings by Sector & Market Cap
+            </h2>
+            <svg 
+              className="w-5 h-5 transform transition-transform duration-200 group-open:rotate-90 text-gray-500 dark:text-gray-400"
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </summary>
+          <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+            <SectorMarketCapMatrix />
+          </div>
+        </details>
       </div>
 
       {/* Recommendations Grid */}
