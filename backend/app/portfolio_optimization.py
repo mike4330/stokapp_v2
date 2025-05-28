@@ -12,6 +12,8 @@ import csv
 import logging
 from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Tuple, Optional
+from app.db.session import get_db
+from sqlalchemy import text
 
 # Configure logging
 def setup_logger():
@@ -132,49 +134,90 @@ def run_optimization(gamma, target_return, target_risk, lower_bound, upper_bound
         logger.info(f"bounds: [{lower_bound}, {upper_bound}]")
         logger.info(f"refresh_data: {refresh_data}")
 
-        # Load tickers and sector mapping from configuration files
-        config_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
-        tickers_file = os.path.join(config_dir, 'tickers.txt')
-        sectormap_file = os.path.join(config_dir, 'sectormap.txt')
-        
-        logger.info(f"Looking for config files in: {config_dir}")
-        logger.info(f"Tickers file: {tickers_file}")
-        logger.info(f"Sector map file: {sectormap_file}")
-        
-        if not os.path.exists(tickers_file) or not os.path.exists(sectormap_file):
-            error_msg = f"Configuration files not found in {config_dir}. Please ensure tickers.txt and sectormap.txt are present."
-            logger.error(error_msg)
-            debug_info['config_files']['status'] = 'error'
-            debug_info['config_files']['error'] = error_msg
-            raise FileNotFoundError(error_msg)
-        
-        debug_info['config_files']['tickers_file'] = tickers_file
-        debug_info['config_files']['sectormap_file'] = sectormap_file
-        
-        # Load and validate tickers
-        with open(tickers_file, "r") as f:
-            tickers = [line.strip() for line in f if not line.startswith("#") and line.strip()]
+        # Load tickers and sector mapping from database instead of configuration files
+        db = next(get_db())
+        try:
+            logger.info("Loading symbols and sector mappings from database...")
+            
+            # Get symbols with target_alloc > 0 from MPT table
+            symbols_query = text("SELECT symbol, target_alloc FROM MPT WHERE target_alloc > 0 ORDER BY symbol")
+            symbols_result = db.execute(symbols_query)
+            symbols_data = symbols_result.fetchall()
+            
+            if not symbols_data:
+                error_msg = "No symbols found with target_alloc > 0 in MPT table"
+                logger.error(error_msg)
+                debug_info['config_files']['status'] = 'error'
+                debug_info['config_files']['error'] = error_msg
+                raise ValueError(error_msg)
+            
+            # Extract tickers list
+            tickers = [row[0] for row in symbols_data]
             debug_info['config_files']['tickers_count'] = len(tickers)
             debug_info['config_files']['tickers_content'] = tickers
-            logger.info(f"Loaded {len(tickers)} tickers from file")
+            logger.info(f"Loaded {len(tickers)} tickers from database")
             logger.info(f"First few tickers: {tickers[:5]}")
-        
-        # Load and validate sector mapping
-        with open(sectormap_file, "r") as f:
-            sector_mapper = dict(line.strip().split(",") for line in f if line.strip())
+            
+            # Get sector mapping for these symbols
+            sector_query = text("SELECT symbol, sector FROM MPT WHERE symbol IN ({}) AND sector IS NOT NULL".format(
+                ','.join(f"'{symbol}'" for symbol in tickers)
+            ))
+            sector_result = db.execute(sector_query)
+            sector_data = sector_result.fetchall()
+            
+            # Create sector mapping dictionary
+            sector_mapper = {row[0]: row[1] for row in sector_data}
             debug_info['config_files']['sectors_count'] = len(sector_mapper)
             debug_info['config_files']['sector_mapping'] = sector_mapper
-            logger.info(f"Loaded {len(sector_mapper)} sector mappings")
+            logger.info(f"Loaded {len(sector_mapper)} sector mappings from database")
             logger.info(f"Unique sectors: {set(sector_mapper.values())}")
-        
-        # Validate sector mapping covers all tickers
-        unmapped_tickers = [t for t in tickers if t not in sector_mapper]
-        if unmapped_tickers:
-            logger.warning(f"Found {len(unmapped_tickers)} unmapped tickers: {unmapped_tickers}")
-            debug_info['optimization']['data_info']['unmapped_tickers'] = unmapped_tickers
-        
-        debug_info['config_files']['status'] = 'success'
-        debug_info['config_files']['message'] = f"Successfully loaded {len(tickers)} tickers and {len(sector_mapper)} sector mappings"
+            
+            # KLUDGE: Read FBonds/DBonds mappings from text file to override database "Bonds" sector
+            # This is needed because optimization expects FBonds/DBonds but database has "Bonds"
+            config_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
+            sectormap_file = os.path.join(config_dir, 'sectormap.txt')
+            
+            fbonds_dbonds_overrides = {}
+            try:
+                if os.path.exists(sectormap_file):
+                    with open(sectormap_file, "r") as f:
+                        for line in f:
+                            if line.strip() and ',' in line:
+                                symbol, sector = line.strip().split(",", 1)
+                                if sector in ['FBonds', 'DBonds'] and symbol in sector_mapper:
+                                    fbonds_dbonds_overrides[symbol] = sector
+                    
+                    # Apply overrides
+                    sector_mapper.update(fbonds_dbonds_overrides)
+                    logger.info(f"Applied {len(fbonds_dbonds_overrides)} FBonds/DBonds overrides from text file")
+                    logger.info(f"Overrides: {fbonds_dbonds_overrides}")
+                    debug_info['config_files']['fbonds_dbonds_overrides'] = fbonds_dbonds_overrides
+                    
+            except Exception as e:
+                logger.warning(f"Could not read FBonds/DBonds overrides from {sectormap_file}: {str(e)}")
+                debug_info['config_files']['override_warning'] = f"FBonds/DBonds override failed: {str(e)}"
+            
+            # Validate sector mapping covers all tickers
+            unmapped_tickers = [t for t in tickers if t not in sector_mapper]
+            if unmapped_tickers:
+                logger.warning(f"Found {len(unmapped_tickers)} unmapped tickers: {unmapped_tickers}")
+                debug_info['optimization']['data_info']['unmapped_tickers'] = unmapped_tickers
+            
+            debug_info['config_files']['status'] = 'success'
+            debug_info['config_files']['message'] = f"Successfully loaded {len(tickers)} tickers and {len(sector_mapper)} sector mappings from database"
+            debug_info['config_files']['data_source'] = 'database'
+            debug_info['config_files']['query_info'] = {
+                'symbols_with_allocation': len(symbols_data),
+                'sectors_mapped': len(sector_data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error loading data from database: {str(e)}")
+            debug_info['config_files']['status'] = 'error'
+            debug_info['config_files']['error'] = f"Database query failed: {str(e)}"
+            raise
+        finally:
+            db.close()
 
         # Process sector constraints
         if sector_constraints:
