@@ -79,3 +79,10 @@ backend/app/config/tickers.txt
 backend/nohup.out
 backend/app/scheduler/job_states.json
 backend/app/scheduler/job_states.json
+desktop_income_charts/*
+backend/app/scheduler/price_updater_state.json
+frontend/reference_code/*
+backend/tmp.json
+backend/sec_data*
+.cursor.json
+.cursorignore
