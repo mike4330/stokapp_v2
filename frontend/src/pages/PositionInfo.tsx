@@ -230,7 +230,7 @@ const PositionInfo: React.FC = () => {
             minWidth: 0,
           }}
         >
-          <div className="bg-gray-900/50 p-6 rounded-lg">
+          <div className="bg-gray-900/50 p-6 rounded-lg shadow-lg">
             <h2 className="text-lg font-semibold mb-4 text-white">Position Details</h2>
             <PositionDetails 
               position={position} 
@@ -240,7 +240,7 @@ const PositionInfo: React.FC = () => {
             />
           </div>
 
-          <div className="bg-gray-900/50 p-6 rounded-lg">
+          <div className="bg-gray-900/50 p-6 rounded-lg shadow-lg">
             <h2 className="text-lg font-semibold mb-4 text-white">Dividend Information</h2>
             <div className="space-y-1">
               <p><span className="text-gray-400">Dividend Yield:</span> {position.dividend_yield.toFixed(2)}%</p>
@@ -248,7 +248,7 @@ const PositionInfo: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-gray-900/50 p-6 rounded-lg">
+          <div className="bg-gray-900/50 p-6 rounded-lg shadow-lg">
             <h2 className="text-lg font-semibold mb-4 text-white">Technical Indicators</h2>
             <div className="space-y-1">
               <p><span className="text-gray-400">50-Day MA:</span> {position.ma50 ? `$${position.ma50.toFixed(2)}` : 'N/A'}</p>

@@ -29,6 +29,8 @@ interface PredictionsResponse {
   summary: DividendSummary;
 }
 
+
+
 const DividendPredictions: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [predictions, setPredictions] = useState<Record<string, DividendPrediction>>({});
@@ -117,15 +119,15 @@ const DividendPredictions: React.FC = () => {
         <div className="mb-8 bg-white dark:bg-gray-800 shadow-md rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-300">Retirement Income Summary</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg shadow-md">
               <p className="text-sm text-gray-500 dark:text-gray-400">Monthly Income</p>
               <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">${summary.total_monthly.toFixed(2)}</p>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg shadow-md">
               <p className="text-sm text-gray-500 dark:text-gray-400">Quarterly Income</p>
               <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">${summary.total_quarterly.toFixed(2)}</p>
             </div>
-            <div className="bg-green-50 dark:bg-green-900 p-4 rounded-lg">
+            <div className="bg-green-50 dark:bg-green-900 p-4 rounded-lg shadow-md">
               <p className="text-sm text-green-600 dark:text-green-400">Yearly Income</p>
               <p className="text-2xl font-bold text-green-700 dark:text-green-300">${summary.total_yearly_formatted}</p>
             </div>

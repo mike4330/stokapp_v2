@@ -18,6 +18,8 @@ interface DividendPayment {
   expected_payment: number;
 }
 
+
+
 const DividendCalendar: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [payments, setPayments] = useState<DividendPayment[]>([]);

@@ -615,22 +615,22 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
                   {lot.date_new || '-'}
                 </td>
                 {/* Format numerical values with appropriate precision */}
-                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 font-mono">
                   {lot.units !== null && lot.units !== undefined ? lot.units.toFixed(4) : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 font-mono" >
                   {lot.units_remaining !== null && lot.units_remaining !== undefined ? lot.units_remaining.toFixed(4) : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 font-mono">
                   {lot.price ? `$${lot.price.toFixed(2)}` : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 font-mono">
                   {lot.lot_basis ? `$${lot.lot_basis.toFixed(2)}` : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 font-mono">
                   {lot.current_value ? `$${lot.current_value.toFixed(2)}` : '-'}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 font-mono">
                   {lot.profit_loss ? `$${lot.profit_loss.toFixed(2)}` : '-'}
                 </td>
                 <td
