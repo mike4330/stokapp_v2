@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 interface Security {
@@ -47,23 +47,7 @@ const SecurityManagement: React.FC = () => {
     dividend_frequency: null
   });
 
-  useEffect(() => {
-    fetchSecurities();
-    fetchAssetClasses();
-  }, []);
-
-  // Poll for task status if we have an active task
-  useEffect(() => {
-    if (currentTask && currentTask.status === 'pending' && showProgressModal) {
-      const interval = setInterval(() => {
-        pollTaskStatus(currentTask.id);
-      }, 1000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [currentTask, showProgressModal]);
-
-  const fetchSecurities = async () => {
+  const fetchSecurities = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get('/api/securities');
@@ -75,9 +59,9 @@ const SecurityManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchAssetClasses = async () => {
+  const fetchAssetClasses = useCallback(async () => {
     try {
       const response = await axios.get('/api/asset-classes');
       setAssetClasses(response.data);
@@ -86,9 +70,9 @@ const SecurityManagement: React.FC = () => {
       // Fallback to default values if API call fails
       setAssetClasses(['Equity', 'Fixed Income', 'Commodity', 'Currency']);
     }
-  };
+  }, []);
 
-  const pollTaskStatus = async (taskId: string) => {
+  const pollTaskStatus = useCallback(async (taskId: string) => {
     try {
       const response = await axios.get(`/api/securities/tasks/${taskId}`);
       setCurrentTask(response.data);
@@ -100,7 +84,23 @@ const SecurityManagement: React.FC = () => {
     } catch (err) {
       console.error('Error polling task status:', err);
     }
-  };
+  }, [fetchSecurities]);
+
+  useEffect(() => {
+    fetchSecurities();
+    fetchAssetClasses();
+  }, [fetchSecurities, fetchAssetClasses]);
+
+  // Poll for task status if we have an active task
+  useEffect(() => {
+    if (currentTask && currentTask.status === 'pending' && showProgressModal) {
+      const interval = setInterval(() => {
+        pollTaskStatus(currentTask.id);
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [currentTask, showProgressModal, pollTaskStatus]);
 
   const handleAddSecurityConfirm = () => {
     // Validate required fields before showing confirmation
