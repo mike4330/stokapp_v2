@@ -28,7 +28,6 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import './App.css';
 import IncomeCharts from './pages/IncomeCharts';
 import SecurityManagement from './pages/SecurityManagement';
-import DataEnrichment from './pages/DataEnrichment';
 
 // Placeholder components for routes
 const DividendCharts = () => <div className="p-4">Dividend History Charts</div>;
@@ -75,7 +74,6 @@ function App() {
             <Route path="/lot-manager" element={<LotManagerPage />} />
             <Route path="/charts/portfolio" element={<PortfolioPerformancePage />} />
             <Route path="/charts/sector" element={<SectorAllocationChart />} />
-            <Route path="/charts/sunburst" element={<PortfolioVisualization />} />
             <Route path="/charts/dividends" element={<DividendCharts />} />
             <Route path="/charts/income" element={<IncomeCharts />} />
             <Route path="/charts/allocation" element={<AllocationGrid />} />
@@ -83,7 +81,6 @@ function App() {
             <Route path="/dividend-calendar" element={<DividendCalendar />} />
             <Route path="/settings/scheduler" element={<SchedulerSettings />} />
             <Route path="/settings/securities" element={<SecurityManagement />} />
-            <Route path="/settings/data-enrichment" element={<DataEnrichment />} />
             <Route path="/analyze/:runId" element={<PortfolioAnalyzer />} />
           </Routes>
         </main>

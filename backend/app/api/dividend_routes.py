@@ -115,6 +115,7 @@ async def get_symbol_prediction(
         
         # Generate forecasts up to MAX_PREDICTION_DATE
         forecast = []
+        has_negative_trend = False
         i = 0
         while True:
             # Calculate next date
@@ -126,10 +127,15 @@ async def get_symbol_prediction(
                 
             forecast_month = next_date.strftime("%Y-%m")
             
-            # Calculate predicted cost
-            predicted_cost = intercept + (slope * (dividend_count + i * interval))
-            if predicted_cost < 0:
-                predicted_cost = 0
+            # Calculate predicted cost (before clamping)
+            predicted_cost_raw = intercept + (slope * (dividend_count + i * interval))
+            
+            # Check if trend is going negative
+            if predicted_cost_raw < 0:
+                has_negative_trend = True
+                break  # Stop generating predictions if trend goes negative
+            
+            predicted_cost = predicted_cost_raw
                 
             forecast.append({
                 "date": forecast_month,
@@ -138,6 +144,10 @@ async def get_symbol_prediction(
             })
             
             i += 1
+        
+        # If the trend is negative, raise an exception to exclude this symbol
+        if has_negative_trend:
+            raise HTTPException(status_code=404, detail=f"Negative dividend trend detected for {symbol}")
         
         # Get last three entries
         last_three = forecast[-3:] if len(forecast) >= 3 else forecast
@@ -157,26 +167,52 @@ async def get_all_dividend_predictions(
     db: Session = Depends(get_db)
 ):
     """
-    Get dividend predictions for all tracked symbols with summary statistics.
+    Get dividend predictions for all currently held symbols with dividend history.
     """
     try:
-        # Define your ticker lists (same as in the PHP code)
-        tickers = [
-            'AMX', 'ANGL', 'AVGO', 'BNDX', 'BRT', 'CARR', 'DGX', 'EMB',
-            'EVC', 'FAF', 'FAGIX', 'FDGFX', 'FNBGX', 'FTS', 'HPK', 'HUN',
-            'IMKTA', 'IPAR', 'JPIB', 'LKOR', 'NXST', 'PBR', 'PLD', 'PGHY',
-            'SJNK', 'TDTF', 'TXNM', 'USLM', 'VALE', 'VCSH', 'WDFC'
-        ]
+        # Get all currently held symbols (replacing hardcoded ticker list)
+        current_holdings_query = text("""
+            SELECT 
+                symbol,
+                SUM(CASE
+                    WHEN units_remaining IS NULL THEN units
+                    ELSE units_remaining
+                END) as net_units
+            FROM transactions
+            WHERE xtype = 'Buy'
+            AND disposition IS NULL
+            GROUP BY symbol
+            HAVING net_units > 0
+            ORDER BY symbol
+        """)
         
-        monthlies = ['ANGL', 'EMB', 'FPE', 'JPIB', 'LKOR', 'FAGIX', 'FNBGX', 'PGHY', 'SJNK', 'VCSH']
+        holdings_result = db.execute(current_holdings_query).fetchall()
+        tickers = [row[0] for row in holdings_result]
         
-        # Process all tickers
+        # Known monthly dividend payers
+        monthlies = ['ANGL', 'EMB', 'FPE', 'JPIB', 'LKOR', 'FAGIX', 'FNBGX', 'PGHY', 'SJNK', 'VCSH', 'TDTF']
+        
+        # Symbols to exclude from predictions (yearly payers, insufficient history, etc.)
+        excluded_symbols = ['DBB', 'PDBC']
+        
+        # Process all currently held tickers
         predictions = {}
         total_monthly = 0
         total_quarterly = 0
         
         for ticker in tickers:
-            is_monthly = ticker in monthlies
+            # Skip excluded symbols
+            if ticker in excluded_symbols:
+                continue
+                
+            # Use automatic frequency detection, with hardcoded list as fallback
+            if ticker in monthlies:
+                is_monthly = True
+            else:
+                # Use automatic detection for symbols not in hardcoded list
+                analysis_service = DividendAnalysisService(db)
+                frequency_data = analysis_service.detect_payment_frequency(ticker)
+                is_monthly = frequency_data["frequency"] == "monthly"
             
             # Get prediction for this ticker (we'd ideally refactor this to avoid duplicate code)
             try:
@@ -190,9 +226,17 @@ async def get_all_dividend_predictions(
                     total_monthly += last_value
                 else:
                     total_quarterly += last_value
-            except HTTPException:
-                # Skip tickers with no data
-                continue
+            except HTTPException as e:
+                # Skip symbols with no dividend data or negative trends
+                if "Negative dividend trend" in str(e.detail):
+                    continue  # Skip symbols with declining dividend trends
+                else:
+                    # Include symbols with no dividend data but show empty predictions
+                    predictions[ticker] = {
+                        "symbol": ticker,
+                        "is_monthly": is_monthly,
+                        "last_three": []
+                    }
         
         # Calculate yearly total
         total_yearly = (total_monthly * 12) + (total_quarterly * 4)
