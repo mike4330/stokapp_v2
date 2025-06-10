@@ -173,21 +173,23 @@ const IncomeCharts: React.FC = () => {
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Income Over Time</h2>
           <ResponsiveContainer width="100%" height={450}>
             <BarChart data={timeSeriesData}>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 6" stroke="#424242"/>
               <XAxis 
                 dataKey="date" 
+                tick={{ fontSize: 11, fill: '#FFF' }}
                 tickFormatter={(date) => new Date(date).toLocaleDateString()}
               />
               <YAxis 
                 tickFormatter={(value) => `$${value.toLocaleString()}`}
+                tick={{ fontSize: 11, fill: '#FFF' }}
               />
               <Tooltip 
                 formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                 labelFormatter={(date) => new Date(date).toLocaleDateString()}
               />
               <Legend />
-              <Bar dataKey="dividends" name="Dividends" stackId="a" fill="#4574b3" />
-              <Bar dataKey="realized_gains" name="Realized Gains" stackId="a" fill="#d62f27" />
+              <Bar dataKey="dividends" name="Dividends" stackId="a" fill="#2929c0" />
+              <Bar dataKey="realized_gains" name="Realized Gains" stackId="a" fill="#13cc13aa" />
             </BarChart>
           </ResponsiveContainer>
         </div>

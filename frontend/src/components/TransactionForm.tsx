@@ -117,7 +117,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
     };
 
     return (
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto bg-gray-800 p-4 rounded-lg">
+        <form onSubmit={handleSubmit} className="max-w-xl mx-auto bg-gray-800 p-4 rounded-lg">
             {error && (
                 <div className="bg-red-500 text-white p-2 rounded-md mb-3 text-sm">
                     {error}
@@ -142,7 +142,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
                         name="account"
                         value={formData.account}
                         onChange={handleInputChange}
-                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
+                        className="mt-1 p-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
                         required
                     >
                         {ACCOUNTS.map(account => (
@@ -156,7 +156,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
                         name="type"
                         value={formData.type}
                         onChange={handleInputChange}
-                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
+                        className="mt-1 p-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
                         required
                     >
                         <option value="Buy">Buy</option>
@@ -173,7 +173,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
                         <input
                             {...getInputProps()}
                             name="symbol"
-                            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
+                            className="p-1 mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
                             required
                         />
                         <ul {...getMenuProps()} 
@@ -205,7 +205,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
                         value={formData.units}
                         onChange={handleInputChange}
                         step="any"
-                        className="mt-1 pt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
+                        className="p-1 mt-1 pt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
                         required
                     />
                 </div>
@@ -217,7 +217,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
                         value={formData.price}
                         onChange={handleInputChange}
                         step="any"
-                        className="mt-1 pt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
+                        className="p-1 mt-1 pt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm"
                         required
                     />
                 </div>
@@ -226,7 +226,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
             <div className="flex justify-end mt-3">
                 <button
                     type="submit"
-                    className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    className="mt-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                     Add Transaction
                 </button>

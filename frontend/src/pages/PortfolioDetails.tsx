@@ -116,9 +116,9 @@ const PortfolioDetails: React.FC = () => {
   // --- BEGIN stacked bar chart logic ---
   // 1. Assign colors to accounts
   const accountColors: string[] = [
-    '#64748b', // slate-500
-    '#6366f1', // indigo-500
-    '#14b8a6', // teal-500
+    '#118911', // slate-500
+    '#2828a9', // indigo-500
+    '#ffcc00', // teal-500
     '#f59e42', // amber-500
     '#a78bfa', // violet-400
     '#10b981', // emerald-500
