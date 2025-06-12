@@ -21,6 +21,155 @@ interface SchedulerStatus {
   jobs: SchedulerJob[];
 }
 
+interface EditJobModalProps {
+  job: SchedulerJob;
+  onClose: () => void;
+  onSave: (jobId: string, data: any) => Promise<void>;
+}
+
+const EditJobModal: React.FC<EditJobModalProps> = ({ job, onClose, onSave }) => {
+  // Extract current schedule from next_run time
+  const nextRunDate = job.next_run ? new Date(job.next_run) : null;
+  
+  const [hour, setHour] = useState<string>(nextRunDate ? nextRunDate.getHours().toString() : '');
+  const [minute, setMinute] = useState<string>(nextRunDate ? nextRunDate.getMinutes().toString() : '');
+  const [dayOfWeek, setDayOfWeek] = useState<string>('mon-fri');  // Default to mon-fri
+  const [persisted, setPersisted] = useState<boolean>(job.persisted_state ?? false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Parse the current schedule from the job name or description
+  useEffect(() => {
+    const parseSchedule = () => {
+      // Try to extract schedule from job name or description
+      const scheduleMatch = job.name.match(/(\d{1,2}):(\d{2})/);
+      if (scheduleMatch) {
+        setHour(scheduleMatch[1]);
+        setMinute(scheduleMatch[2]);
+      }
+      
+      // Try to extract day pattern
+      if (job.name.includes('weekdays')) {
+        setDayOfWeek('mon-fri');
+      } else if (job.name.includes('Monday, Wednesday, Friday')) {
+        setDayOfWeek('mon,wed,fri');
+      } else if (job.name.includes('Tuesday, Thursday')) {
+        setDayOfWeek('tue,thu');
+      }
+    };
+
+    parseSchedule();
+  }, [job]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave(job.id, {
+        hour: parseInt(hour),
+        minute: parseInt(minute),
+        day_of_week: dayOfWeek,
+        persisted
+      });
+      onClose();
+    } catch (error) {
+      console.error('Error saving job:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+        <div className="mt-3">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+            Edit Job: {job.name}
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Hour (0-23)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="23"
+                value={hour}
+                onChange={(e) => setHour(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Minute (0-59)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="59"
+                value={minute}
+                onChange={(e) => setMinute(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Day of Week
+              </label>
+              <select
+                value={dayOfWeek}
+                onChange={(e) => setDayOfWeek(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              >
+                <option value="mon-fri">Monday to Friday</option>
+                <option value="mon,wed,fri">Monday, Wednesday, Friday</option>
+                <option value="tue,thu">Tuesday, Thursday</option>
+                <option value="mon">Monday</option>
+                <option value="tue">Tuesday</option>
+                <option value="wed">Wednesday</option>
+                <option value="thu">Thursday</option>
+                <option value="fri">Friday</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={persisted}
+                  onChange={(e) => setPersisted(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
+                />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Persist State
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-5 flex justify-end space-x-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SchedulerSettings: React.FC = () => {
   const [schedulerData, setSchedulerData] = useState<SchedulerStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,6 +177,7 @@ const SchedulerSettings: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [editingJob, setEditingJob] = useState<SchedulerJob | null>(null);
 
   useEffect(() => {
     const fetchSchedulerStatus = async () => {
@@ -122,6 +272,31 @@ const SchedulerSettings: React.FC = () => {
       });
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleEditJob = async (jobId: string, data: any) => {
+    try {
+      const response = await axios.post(`/scheduler/job/${jobId}/edit`, data);
+      
+      if (response.data.success) {
+        setNotification({
+          type: 'success',
+          message: response.data.message
+        });
+        setRefreshKey(prevKey => prevKey + 1);
+      } else {
+        setNotification({
+          type: 'error',
+          message: response.data.message || 'Failed to update job'
+        });
+      }
+    } catch (err) {
+      console.error(`Error updating job ${jobId}:`, err);
+      setNotification({
+        type: 'error',
+        message: 'Failed to update job'
+      });
     }
   };
 
@@ -267,6 +442,12 @@ const SchedulerSettings: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
                         <div className="flex justify-end space-x-2">
                           <button
+                            onClick={() => setEditingJob(job)}
+                            className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                          >
+                            Edit
+                          </button>
+                          <button
                             onClick={() => handleToggleJob(job.id, job.enabled)}
                             disabled={actionLoading === job.id}
                             className={`inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${
@@ -282,7 +463,6 @@ const SchedulerSettings: React.FC = () => {
                               </svg>
                             ) : job.enabled ? 'Disable' : 'Enable'}
                           </button>
-                          
                           <button
                             onClick={() => handleRunNow(job.id)}
                             disabled={actionLoading === `run-${job.id}` || !job.enabled}
@@ -308,6 +488,14 @@ const SchedulerSettings: React.FC = () => {
         </div>
       )}
 
+      {editingJob && (
+        <EditJobModal
+          job={editingJob}
+          onClose={() => setEditingJob(null)}
+          onSave={handleEditJob}
+        />
+      )}
+
       <div className="mt-8 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
           Scheduler Information
@@ -319,6 +507,7 @@ const SchedulerSettings: React.FC = () => {
           <ul>
             <li><strong>update_overamt</strong> - Updates allocation calculations every 5 minutes during market hours (9:00 AM - 4:00 PM ET, weekdays only)</li>
             <li><strong>price_updater</strong> - Updates stock prices starting at 9:35 AM ET on weekdays, running continuously in a loop until market close (4:00 PM ET)</li>
+            <li><strong>xag_price_job</strong> - Updates XAG (Silver) prices daily at 3:30 PM ET on weekdays</li>
           </ul>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
             Jobs can be enabled or disabled using the buttons in the table above. Disabled jobs will not run until they are re-enabled.

@@ -111,6 +111,7 @@ pip install -r requirements.txt
 DB_PATH=app/db/mpmv2.db
 HOST=0.0.0.0
 PORT=8000
+METAL_PRICE_API_KEY=your_api_key_here  # Required for XAG price updates
 ```
 
 ## Running the Application
@@ -131,6 +132,7 @@ The application includes a task scheduler that runs tasks at specified intervals
 
 - `update_overamt` - Runs every 5 minutes during US market hours (9:00 AM - 4:00 PM ET, weekdays only)
 - `price_updater` - Runs daily at 9:35 AM ET on weekdays
+- `xag_price_job` - Runs daily at 3:30 PM ET on weekdays to update XAG (Silver) prices
 
 ### Testing the Scheduler
 

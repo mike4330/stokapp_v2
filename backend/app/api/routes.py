@@ -1200,68 +1200,68 @@ def get_symbol_returns(symbol: str, days: int = 365, db: Session = Depends(get_d
 def get_potential_lots(
     profit_threshold: float = 0.6,
     lot_value_threshold: float = 1.0,
-    overweight_threshold: float = 8.6,
+    overweight_threshold: float = 15,
     db: Session = Depends(get_db)
 ):
     """Get potential lots for sale based on profit and overweight criteria"""
     try:
         # Get overweight positions from MPT
         overweight_query = text("""
-            SELECT symbol, flag, overamt 
-            FROM MPT 
+            SELECT symbol, flag, overamt
+            FROM MPT
             WHERE flag = 'O' AND overamt > :threshold
             ORDER BY overamt DESC
         """)
         overweight_positions = db.execute(overweight_query, {"threshold": overweight_threshold}).fetchall()
-        
+
         potential_lots = []
-        
+
         for position in overweight_positions:
             symbol = position.symbol
             target_diff = position.overamt
-            
+
             # Skip if not overweight enough
             if target_diff < overweight_threshold:
                 continue
-                
+
             # Get current price
             price_query = text("SELECT price FROM prices WHERE symbol = :symbol")
             price_result = db.execute(price_query, {"symbol": symbol}).fetchone()
             if not price_result:
                 continue
-                
+
             current_price = float(price_result[0])
-            
+
             # Get open lots
             lots_query = text("""
                 SELECT acct, date_new, units, price, units_remaining
-                FROM transactions 
-                WHERE symbol = :symbol 
-                AND xtype = 'Buy' 
+                FROM transactions
+                WHERE symbol = :symbol
+                AND xtype = 'Buy'
                 AND disposition IS NULL
             """)
-            
+
             lots = db.execute(lots_query, {"symbol": symbol}).fetchall()
-            
+
             for lot in lots:
                 # Skip lots with no price
                 if lot.price == 0:
                     continue
-                    
+
                 # Only consider profitable lots
                 if lot.price >= current_price:
                     continue
-                    
+
                 units = float(lot.units_remaining if lot.units_remaining else lot.units)
                 current_value = round(current_price * units, 2)
                 cost = lot.price * units
                 profit = round(current_value - cost, 2)
                 profit_pct = round((profit / cost) * 100, 3)
-                
+
                 # Skip if doesn't meet thresholds
                 if profit < profit_threshold or current_value < lot_value_threshold:
                     continue
-                    
+
                 # Calculate if long term
                 try:
                     # Parse the date string from the database
@@ -1269,12 +1269,12 @@ def get_potential_lots(
                         purchase_date = datetime.strptime(lot.date_new, '%Y-%m-%d').date()
                     else:
                         purchase_date = lot.date_new
-                        
+
                     is_long_term = (datetime.now().date() - purchase_date).days > 365
                 except (ValueError, TypeError) as e:
                     logging.warning(f"Date parsing error for lot {lot}: {str(e)}")
                     is_long_term = False
-                
+
                 potential_lots.append({
                     "account": lot.acct,
                     "symbol": symbol,
@@ -1287,12 +1287,12 @@ def get_potential_lots(
                     "is_long_term": is_long_term,
                     "target_diff": target_diff
                 })
-        
+
         # Sort by profit percentage descending
         potential_lots.sort(key=lambda x: x["profit_pct"], reverse=True)
-        
+
         return potential_lots
-        
+
     except Exception as e:
         logging.error(f"Error in get_potential_lots: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

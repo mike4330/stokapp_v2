@@ -6,6 +6,7 @@ from datetime import datetime
 import os
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings
 from app.api.routes import router as api_router
@@ -245,6 +246,60 @@ async def get_repository_run_endpoint(run_id: str):
     if not result['success']:
         raise HTTPException(status_code=404, detail=result['error'])
     return result
+
+@app.post("/scheduler/job/{job_id}/edit")
+def edit_job(job_id: str, job_data: dict):
+    """Edit a scheduled job's settings."""
+    if not scheduler.running:
+        return {"success": False, "message": "Scheduler is not running"}
+    
+    try:
+        job = scheduler.get_job(job_id)
+        if not job:
+            return {"success": False, "message": f"Job {job_id} not found"}
+        
+        # Store current enabled state
+        was_enabled = job.next_run_time is not None
+        
+        # Update job trigger if time/date settings are provided
+        if any(key in job_data for key in ['hour', 'minute', 'day_of_week']):
+            trigger = job.trigger
+            if isinstance(trigger, CronTrigger):
+                # Get current trigger settings
+                current_hour = trigger.fields[3].expressions[0].first if hasattr(trigger.fields[3].expressions[0], 'first') else '*'
+                current_minute = trigger.fields[4].expressions[0].first if hasattr(trigger.fields[4].expressions[0], 'first') else '*'
+                current_day = trigger.fields[5].expressions[0].first if hasattr(trigger.fields[5].expressions[0], 'first') else '*'
+                
+                # Create new trigger with updated settings
+                new_trigger = CronTrigger(
+                    hour=job_data.get('hour', current_hour),
+                    minute=job_data.get('minute', current_minute),
+                    day_of_week=job_data.get('day_of_week', current_day),
+                    timezone=trigger.timezone
+                )
+                scheduler.reschedule_job(job_id, trigger=new_trigger)
+                
+                # Restore enabled state if it was enabled before
+                if was_enabled:
+                    scheduler.resume_job(job_id)
+        
+        # Update persisted state if provided
+        if 'persisted' in job_data:
+            job_states = load_job_states()
+            job_states[job_id] = job_data['persisted']
+            save_job_states(job_states)
+            
+            # Also update job's enabled state to match persisted state
+            if job_data['persisted']:
+                scheduler.resume_job(job_id)
+            else:
+                scheduler.pause_job(job_id)
+        
+        logger.info(f"Job {job_id} updated successfully")
+        return {"success": True, "message": f"Job {job_id} updated successfully"}
+    except Exception as e:
+        logger.error(f"Error updating job {job_id}: {str(e)}")
+        return {"success": False, "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

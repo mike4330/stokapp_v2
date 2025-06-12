@@ -188,7 +188,8 @@ const PortfolioBalance: React.FC = () => {
       </div>
 
       {/* Recommendations Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+    
+      <div className="grid grid-cols-1 md:grid-cols-[2fr_3fr] gap-8 mb-8">
         {/* Buy Recommendations Section */}
         <div>
           <div className="flex justify-between items-center mb-6">
