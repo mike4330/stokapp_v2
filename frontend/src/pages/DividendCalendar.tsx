@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { getDividendStyle, generateColorStops } from '../utils/colorUtils';
+import { Helmet } from 'react-helmet-async';
 
 interface DividendPayment {
   symbol: string;
@@ -144,10 +145,11 @@ const DividendCalendar: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>Dividend Calendar | MPM</title>
+      </Helmet>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Dividend Calendar</h1>
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-200">Dividend Calendar</h1>
-        
-        {/* Enhanced Month Selector */}
         <div className="flex items-center space-x-4 bg-white dark:bg-gray-800 rounded-lg shadow-md p-2">
           <button
             onClick={handlePreviousMonth}
@@ -184,7 +186,6 @@ const DividendCalendar: React.FC = () => {
         </div>
       </div>
 
-      {/* Dynamic Color Legend */}
       <div className="mb-6">
         <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
           Expected Payment Color Scale (Max: ${maxAmount.toLocaleString()})
@@ -209,7 +210,6 @@ const DividendCalendar: React.FC = () => {
         </div>
       </div>
 
-      {/* Calendar Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {Object.entries(paymentsByDate).length > 0 ? (
           Object.entries(paymentsByDate).map(([date, datePayments]) => (

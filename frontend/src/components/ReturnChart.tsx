@@ -35,6 +35,12 @@ interface ReturnChartProps {
   symbol: string;
 }
 
+// Helper to parse YYYY-MM-DD as local date
+const parseLocalDate = (dateString: string) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading, symbol }) => {
   if (isLoading) {
     return (
@@ -63,7 +69,7 @@ export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading, symbo
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis
               dataKey="date"
-              tickFormatter={(date) => new Date(date).toLocaleDateString()}
+              tickFormatter={(date) => parseLocalDate(date).toLocaleDateString()}
               stroke="#9CA3AF"
               tick={{ fontSize: 11 }}
             />
@@ -74,7 +80,7 @@ export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading, symbo
             />
             <Tooltip
               formatter={(value: number) => [`${value.toFixed(2)}%`, 'Return']}
-              labelFormatter={(date) => new Date(date).toLocaleDateString()}
+              labelFormatter={(date) => parseLocalDate(date).toLocaleDateString()}
               contentStyle={{
                 backgroundColor: '#1F2937',
                 border: 'none',

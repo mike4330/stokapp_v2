@@ -102,9 +102,10 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ symbol }) => {
     setTimeWindow(newTimeWindow);
   };
 
-  const parseDate = (dateString: string) => {
-    // Handle different date formats
-    return new Date(dateString);
+  const parseLocalDate = (dateString: string) => {
+    // Parse YYYY-MM-DD as local date (no timezone shift)
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
   };
 
   if (loading) {
@@ -136,23 +137,23 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ symbol }) => {
   // Format dates for display
   const formattedData = priceData.map(item => ({
     ...item,
-    formattedDate: new Date(item.date).toLocaleDateString(),
+    formattedDate: parseLocalDate(item.date).toLocaleDateString(),
   }));
 
   // Determine chart date range
-  const chartStartDate = formattedData.length > 0 ? parseDate(formattedData[0].date).getTime() : 0;
-  const chartEndDate = formattedData.length > 0 ? parseDate(formattedData[formattedData.length - 1].date).getTime() : 0;
+  const chartStartDate = formattedData.length > 0 ? parseLocalDate(formattedData[0].date).getTime() : 0;
+  const chartEndDate = formattedData.length > 0 ? parseLocalDate(formattedData[formattedData.length - 1].date).getTime() : 0;
   
   // Filter transactions to only include those within the chart date range
   const visibleTransactions = transactions.filter(transaction => {
-    const transactionTime = parseDate(transaction.date).getTime();
+    const transactionTime = parseLocalDate(transaction.date).getTime();
     return transactionTime >= chartStartDate && transactionTime <= chartEndDate;
   });
 
   // Process transactions
   const processedTransactions = visibleTransactions
     // Sort by date
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime())
     // Group by date to avoid too many stacked triangles
     .reduce((acc, transaction) => {
       const dateStr = transaction.date.substring(0, 10); // YYYY-MM-DD part
@@ -175,13 +176,13 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ symbol }) => {
   // Find transaction markers to overlay
   const transactionMarkers = processedTransactions.map(transaction => {
     // Find the closest price data point to this transaction date
-    const transactionDate = parseDate(transaction.date);
+    const transactionDate = parseLocalDate(transaction.date);
     
     let bestMatchIndex = 0;
     let smallestDiff = Infinity;
     
     formattedData.forEach((dataPoint, index) => {
-      const dataPointDate = parseDate(dataPoint.date);
+      const dataPointDate = parseLocalDate(dataPoint.date);
       const diff = Math.abs(dataPointDate.getTime() - transactionDate.getTime());
       if (diff < smallestDiff) {
         smallestDiff = diff;

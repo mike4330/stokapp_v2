@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 
 interface Holding {
   symbol: string;
@@ -280,7 +281,11 @@ const Holdings: React.FC = () => {
   }
 
   return (
-    <div className="py-8">
+    <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>Portfolio Holdings | MPM</title>
+      </Helmet>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Portfolio Holdings</h1>
       {/* Portfolio Summary - No changes needed here */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">

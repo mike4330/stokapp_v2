@@ -9,6 +9,7 @@ import React, { useRef, useState } from 'react';
 import LotManager, { LotManagerRef } from '../components/LotManager';
 import EditTransactionModal from '../components/EditTransactionModal';
 import { OpenLot } from '../components/LotManager';
+import { Helmet } from 'react-helmet-async';
 
 interface Transaction {
   id: number;
@@ -119,7 +120,11 @@ const LotManagerPage: React.FC = () => {
   };
 
   return (
-    <div>
+    <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>Lot Manager | MPM</title>
+      </Helmet>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Lot Manager</h1>
       <LotManager 
         key={refreshKey}
         ref={lotManagerRef}

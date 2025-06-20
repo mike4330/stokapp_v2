@@ -111,7 +111,7 @@ const DividendPredictions: React.FC = () => {
   }
 
   return (
-    <>
+    <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Dividend Predictions</h1>
       
       {/* Summary Section */}
@@ -226,7 +226,7 @@ const DividendPredictions: React.FC = () => {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

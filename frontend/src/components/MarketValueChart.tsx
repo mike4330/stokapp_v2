@@ -34,6 +34,12 @@ interface MarketValueChartProps {
 
 type TimeFrame = '6M' | '1Y' | '2Y' | 'ALL';
 
+// Helper to parse YYYY-MM-DD as local date
+const parseLocalDate = (dateString: string) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 const MarketValueChart: React.FC<MarketValueChartProps> = ({ symbol }) => {
   const [data, setData] = useState<MarketValueData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +54,8 @@ const MarketValueChart: React.FC<MarketValueChartProps> = ({ symbol }) => {
           ...item,
           market_value: parseFloat(item.close) * item.shares,
           raw_timestamp: item.timestamp,
-          timestamp: new Date(item.timestamp).toLocaleDateString()
+          // Use local date parsing for display
+          timestamp: parseLocalDate(item.timestamp).toLocaleDateString()
         }));
         setData(transformedData);
         setError(null);
@@ -80,7 +87,8 @@ const MarketValueChart: React.FC<MarketValueChartProps> = ({ symbol }) => {
       case 'ALL':
         return data;
     }
-    return data.filter(item => new Date(item.raw_timestamp) >= cutoffDate);
+    // Compare using local date parsing
+    return data.filter(item => parseLocalDate(item.raw_timestamp) >= cutoffDate);
   };
 
   const filteredData = getFilteredData();
