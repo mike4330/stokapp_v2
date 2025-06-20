@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { Helmet } from 'react-helmet-async';
 
 interface SchedulerJob {
   id: string;
@@ -315,11 +316,12 @@ const SchedulerSettings: React.FC = () => {
   };
 
   return (
-    <div className="py-8">
+    <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>Scheduler Settings | MPM</title>
+      </Helmet>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Scheduler Settings</h1>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-          Scheduler Settings
-        </h1>
         <button
           onClick={handleRefresh}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-colors duration-200 flex items-center"

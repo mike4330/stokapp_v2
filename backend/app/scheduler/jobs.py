@@ -59,5 +59,20 @@ def register_jobs(scheduler: BackgroundScheduler):
         replace_existing=True
     )
     logger.info("Registered job: moving_averages_job (runs daily at 10:00 AM ET, weekdays only)")
+
+    # Register the XAG price update job to run at 15:30 ET on weekdays only
+    scheduler.add_job(
+        func=tasks_module.xag_price_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",  # Monday through Friday only
+            hour="15",  # 3 PM
+            minute="30",  # At minute 30
+            timezone=US_EASTERN
+        ),
+        id="xag_price_job",
+        name="Update XAG (Silver) Price",
+        replace_existing=True
+    )
+    logger.info("Registered job: xag_price_job (runs daily at 3:30 PM ET, weekdays only)")
     
     # Add additional jobs here as needed 

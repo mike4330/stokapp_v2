@@ -4,6 +4,7 @@
 from .overamt_task import run_update
 from .price_updater_task import update_prices
 from .moving_averages_task import run_moving_averages
+from .xag_price_task import update_xag_price
 
 # Create the main entry point for the scheduler
 def update_overamt():
@@ -78,4 +79,22 @@ def moving_averages_job():
         return success
     except Exception as e:
         logger.exception(f"Error in moving_averages_job: {e}")
+        return False
+
+def xag_price_job():
+    """
+    Entry point for the XAG price update job.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Executing xag_price_job")
+    try:
+        success = update_xag_price()
+        if success:
+            logger.info("xag_price_job completed successfully")
+        else:
+            logger.error("xag_price_job failed")
+        return success
+    except Exception as e:
+        logger.exception(f"Error in xag_price_job: {e}")
         return False 
