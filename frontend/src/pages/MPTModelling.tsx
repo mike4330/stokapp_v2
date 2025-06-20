@@ -6,6 +6,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { Helmet } from 'react-helmet-async';
 
 interface OptimizationConstraints {
   gamma: number;
@@ -321,10 +322,11 @@ const MPTModelling: React.FC = () => {
   };
 
   return (
-    <div className="py-8">
-      <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
-        MPT Modelling
-      </h1>
+    <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>MPT Modelling | MPM</title>
+      </Helmet>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Modern Portfolio Theory Modelling</h1>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div className="bg-green-800 py-3 px-6">
           <h2 className="text-lg font-semibold text-white">On-Demand MPT Modeling</h2>

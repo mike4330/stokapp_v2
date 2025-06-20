@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import SectorMarketCapMatrix from '../components/SectorMarketCapMatrix';
+import { Helmet } from 'react-helmet-async';
 
 interface PotentialLot {
   account: string;
@@ -160,11 +161,11 @@ const PortfolioBalance: React.FC = () => {
   if (error) return <div className="p-4 text-red-500">{error}</div>;
 
   return (
-    <div className="py-8">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">
-        Portfolio Balance
-      </h1>
-
+    <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>Portfolio Balance | MPM</title>
+      </Helmet>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Portfolio Balance</h1>
       {/* Sector-MarketCap Distribution Section */}
       <div className="mb-8">
         <details className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 group marker:content-none">

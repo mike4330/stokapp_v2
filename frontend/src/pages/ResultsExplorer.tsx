@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { Helmet } from 'react-helmet-async';
 
 interface RunMeta {
   id: string;
@@ -259,10 +260,11 @@ const ResultsExplorer: React.FC = () => {
   };
 
   return (
-    <div className="py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">MPT Results Explorer</h1>
-      </div>
+    <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>Results Explorer | MPM</title>
+      </Helmet>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Results Explorer</h1>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div className="bg-green-800 py-3 px-6 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-white">Saved MPT Modeling Results</h2>

@@ -10,6 +10,7 @@ import axios from 'axios';
 import TransactionForm from '../components/TransactionForm';
 import EditTransactionModal from '../components/EditTransactionModal';
 import styles from './Transactions.module.css';
+import { Helmet } from 'react-helmet-async';
 
 interface Transaction {
   id: number;
@@ -114,116 +115,119 @@ const Transactions: React.FC = () => {
   }
 
   return (
-    <div className="py-8">
-      <div className="sm:flex sm:items-center">
-        <div className="sm:flex-auto">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Transactions</h1>
-          <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
-            A list of all transactions including their symbol, type, units, price, and date.
-          </p>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Transaction History</h1>
+      <div className="py-8">
+        <div className="sm:flex sm:items-center">
+          <div className="sm:flex-auto">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Transactions</h1>
+            <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+              A list of all transactions including their symbol, type, units, price, and date.
+            </p>
+          </div>
+          <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+            <button
+              type="button"
+              onClick={() => setShowForm(!showForm)}
+              className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto"
+            >
+              {showForm ? 'Hide Form' : 'Add Transaction'}
+            </button>
+          </div>
         </div>
-        <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-          <button
-            type="button"
-            onClick={() => setShowForm(!showForm)}
-            className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto"
-          >
-            {showForm ? 'Hide Form' : 'Add Transaction'}
-          </button>
-        </div>
-      </div>
 
-      {showForm && (
-        <div className="mt-6">
-          <TransactionForm onTransactionCreated={handleTransactionCreated} />
-        </div>
-      )}
-      
-      <div className="mt-8 flex flex-col">
-        <div className="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
-          <div className="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
-            <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
-                    <th scope="col" className={styles['table-header']}>ID</th>
-                    <th scope="col" className={styles['table-header']}>Date</th>
-                    <th scope="col" className={styles['table-header']}>Account</th>
-                    <th scope="col" className={styles['table-header']}>Symbol</th>
-                    <th scope="col" className={styles['table-header']}>Type</th>
-                    <th scope="col" className={styles['table-header']}>Status</th>
-                    <th scope="col" className={styles['table-header']}>Units</th>
-                    <th scope="col" className={styles['table-header']}>Price</th>
-                    <th scope="col" className={styles['table-header']}>Total</th>
-                    <th scope="col" className={styles['table-header']}>P/L</th>
-                    <th scope="col" className="relative py-2 pl-3 pr-4 sm:pr-6">
-                      <span className="sr-only">Edit</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-600 bg-white dark:bg-gray-800">
-                  {transactions.map((transaction) => {
-                    const total = calculateTotal(transaction.units, transaction.price);
-                    
-                    return (
-                      <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                        <td className={`${styles['table-cell']} font-medium text-gray-900 dark:text-white`}>
-                          {transaction.id}
-                        </td>
-                        <td className={`${styles['table-cell']} font-medium text-gray-900 dark:text-white`}>
-                          {transaction.date_new}
-                        </td>
-                        <td className={styles['table-cell']}>{transaction.acct || '-'}</td>
-                        <td className={styles['table-cell']}>{transaction.symbol}</td>
-                        <td className={styles['table-cell']}>
-                          <span className={`${styles['status-badge']} ${
-                            transaction.xtype.toLowerCase() === 'buy' 
-                              ? styles['status-badge-green']
-                              : transaction.xtype.toLowerCase() === 'sell'
-                              ? styles['status-badge-red']
-                              : styles['status-badge-blue']
-                          }`}>
-                            {transaction.xtype}
-                          </span>
-                        </td>
-                        <td className={styles['table-cell']}>
-                          {transaction.disposition && (
+        {showForm && (
+          <div className="mt-6">
+            <TransactionForm onTransactionCreated={handleTransactionCreated} />
+          </div>
+        )}
+        
+        <div className="mt-8 flex flex-col">
+          <div className="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
+            <div className="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
+              <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th scope="col" className={styles['table-header']}>ID</th>
+                      <th scope="col" className={styles['table-header']}>Date</th>
+                      <th scope="col" className={styles['table-header']}>Account</th>
+                      <th scope="col" className={styles['table-header']}>Symbol</th>
+                      <th scope="col" className={styles['table-header']}>Type</th>
+                      <th scope="col" className={styles['table-header']}>Status</th>
+                      <th scope="col" className={styles['table-header']}>Units</th>
+                      <th scope="col" className={styles['table-header']}>Price</th>
+                      <th scope="col" className={styles['table-header']}>Total</th>
+                      <th scope="col" className={styles['table-header']}>P/L</th>
+                      <th scope="col" className="relative py-2 pl-3 pr-4 sm:pr-6">
+                        <span className="sr-only">Edit</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-600 bg-white dark:bg-gray-800">
+                    {transactions.map((transaction) => {
+                      const total = calculateTotal(transaction.units, transaction.price);
+                      
+                      return (
+                        <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                          <td className={`${styles['table-cell']} font-medium text-gray-900 dark:text-white`}>
+                            {transaction.id}
+                          </td>
+                          <td className={`${styles['table-cell']} font-medium text-gray-900 dark:text-white`}>
+                            {transaction.date_new}
+                          </td>
+                          <td className={styles['table-cell']}>{transaction.acct || '-'}</td>
+                          <td className={styles['table-cell']}>{transaction.symbol}</td>
+                          <td className={styles['table-cell']}>
                             <span className={`${styles['status-badge']} ${
-                              transaction.disposition === 'sold'
-                                ? styles['status-badge-gray']
-                                : styles['status-badge-yellow']
+                              transaction.xtype.toLowerCase() === 'buy' 
+                                ? styles['status-badge-green']
+                                : transaction.xtype.toLowerCase() === 'sell'
+                                ? styles['status-badge-red']
+                                : styles['status-badge-blue']
                             }`}>
-                              {transaction.disposition}
+                              {transaction.xtype}
                             </span>
-                          )}
-                        </td>
-                        <td className={`${styles['table-cell']} font-mono`}>{transaction.units}</td>
-                        <td className={`${styles['table-cell']} font-mono`}>${transaction.price.toFixed(2)}</td>
-                        <td className={`${styles['table-cell']} font-mono`}>${total.toFixed(2)}</td>
-                        <td className={styles['table-cell']}>
-                          {transaction.xtype === 'Sell' && transaction.gain !== null && (
-                            <span className={`${
-                              transaction.gain >= 0 
-                                ? 'text-green-600 dark:text-green-400 font-mono' 
-                                : 'text-red-600 dark:text-red-400 font-mono'
-                            }`}>
-                              {transaction.gain >= 0 ? '+' : ''}${transaction.gain.toFixed(2)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="relative whitespace-nowrap py-2 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                          <button 
-                            onClick={() => handleEditClick(transaction)}
-                            className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300"
-                          >
-                            Edit
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className={styles['table-cell']}>
+                            {transaction.disposition && (
+                              <span className={`${styles['status-badge']} ${
+                                transaction.disposition === 'sold'
+                                  ? styles['status-badge-gray']
+                                  : styles['status-badge-yellow']
+                              }`}>
+                                {transaction.disposition}
+                              </span>
+                            )}
+                          </td>
+                          <td className={`${styles['table-cell']} font-mono`}>{transaction.units}</td>
+                          <td className={`${styles['table-cell']} font-mono`}>${transaction.price.toFixed(2)}</td>
+                          <td className={`${styles['table-cell']} font-mono`}>${total.toFixed(2)}</td>
+                          <td className={styles['table-cell']}>
+                            {transaction.xtype === 'Sell' && transaction.gain !== null && (
+                              <span className={`${
+                                transaction.gain >= 0 
+                                  ? 'text-green-600 dark:text-green-400 font-mono' 
+                                  : 'text-red-600 dark:text-red-400 font-mono'
+                              }`}>
+                                {transaction.gain >= 0 ? '+' : ''}${transaction.gain.toFixed(2)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="relative whitespace-nowrap py-2 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                            <button 
+                              onClick={() => handleEditClick(transaction)}
+                              className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300"
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

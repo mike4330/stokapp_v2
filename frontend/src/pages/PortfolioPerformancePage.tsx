@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
+import { Helmet } from 'react-helmet-async';
 // Import chart components
 import PortfolioPerformanceChart from '../components/PortfolioPerformanceChart';
 import ReturnsChart from '../components/ReturnsChart';
@@ -103,8 +104,11 @@ const PortfolioPerformancePage: React.FC = () => {
   }, [sectorReturnsData, showSectorDollars]);
 
   return (
-    <div className="py-6">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Portfolio Performance</h1>
+    <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>Portfolio Performance | MPM</title>
+      </Helmet>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Portfolio Performance</h1>
       
       {/* 
         TOP SECTION: Main portfolio charts grid (2 columns on larger screens)
