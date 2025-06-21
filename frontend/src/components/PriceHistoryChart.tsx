@@ -268,7 +268,7 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ symbol }) => {
               tick={{ fill: '#aaa', fontSize: 11 }}
               tickFormatter={(val, idx) => {
                 // Show fewer ticks for readability
-                return idx % 20 === 0 ? val : '';
+                return idx % 10 === 0 ? val : '';
               }}
             />
             <YAxis 
