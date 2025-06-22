@@ -10,6 +10,12 @@
  * 
  * Navigation bar with a modern, button-like appearance and enhanced visual effects.
  * Provides links to major sections with visual separation between items.
+ * 
+ * Reorganized for better logical flow:
+ * 1. Portfolio Management (core functionality)
+ * 2. Analysis & Charts (data visualization)
+ * 3. Tools & Settings (utilities and configuration)
+ * 4. Modelling (advanced analysis)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -45,8 +51,8 @@ const Button: React.FC<ButtonProps> = ({ children, to, onClick, className = '', 
 };
 
 const ButtonizedNavbar: React.FC = () => {
-  const [isChartsOpen, setIsChartsOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [isModellingOpen, setIsModellingOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -68,18 +74,18 @@ const ButtonizedNavbar: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isChartsOpen || isSettingsOpen || isModellingOpen) {
+      if (isAnalysisOpen || isToolsOpen || isModellingOpen) {
         const target = event.target as HTMLElement;
         if (!target.closest('.dropdown-container')) {
-          setIsChartsOpen(false);
-          setIsSettingsOpen(false);
+          setIsAnalysisOpen(false);
+          setIsToolsOpen(false);
           setIsModellingOpen(false);
         }
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isChartsOpen, isSettingsOpen, isModellingOpen]);
+  }, [isAnalysisOpen, isToolsOpen, isModellingOpen]);
 
   return (
     <nav className="bg-gray-800 text-gray-100">
@@ -87,23 +93,25 @@ const ButtonizedNavbar: React.FC = () => {
         <div className="flex flex-wrap">
           {/* Navigation Items as Buttons */}
           <div className="flex">
-            {/* Main Navigation Buttons */}
-            <Button to="/transactions">Transactions</Button>
-            <Button to="/holdings">Holdings</Button>
-            <Button to="/portfolio-balance">Portfolio Balance</Button>
-            <Button to="/lot-manager">Lot Manager</Button>
+            {/* 1. PORTFOLIO MANAGEMENT - Core functionality */}
+            <div className="flex border-r border-gray-600 pr-2">
+              <Button to="/transactions">Transactions</Button>
+              <Button to="/holdings">Holdings</Button>
+              <Button to="/portfolio-balance">Portfolio Balance</Button>
+              <Button to="/lot-manager">Lot Manager</Button>
+            </div>
             
-            {/* Charts Dropdown */}
-            <div className="relative dropdown-container">
+            {/* 2. ANALYSIS & CHARTS - Data visualization */}
+            <div className="relative dropdown-container border-r border-gray-600 px-2">
               <Button
                 onClick={() => {
-                  setIsChartsOpen(!isChartsOpen);
-                  setIsSettingsOpen(false);
+                  setIsAnalysisOpen(!isAnalysisOpen);
+                  setIsToolsOpen(false);
                   setIsModellingOpen(false);
                 }}
                 isDropdown
               >
-                Charts
+                Analysis & Charts
                 <svg
                   className="ml-2 h-5 w-5"
                   xmlns="http://www.w3.org/2000/svg"
@@ -119,22 +127,45 @@ const ButtonizedNavbar: React.FC = () => {
                 </svg>
               </Button>
 
-              {isChartsOpen && (
+              {isAnalysisOpen && (
                 <div className="absolute left-0 top-full mt-2 w-56 rounded-lg shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 z-10">
                   <div className="py-1" role="menu" aria-orientation="vertical">
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      Portfolio Analysis
+                    </div>
+                    <Link
+                      to="/charts/portfolio"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsAnalysisOpen(false)}
+                    >
+                      Portfolio Performance
+                    </Link>
                     <Link
                       to="/charts/allocation"
                       className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
                       role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
+                      onClick={() => setIsAnalysisOpen(false)}
                     >
                       Allocation Grid
                     </Link>
                     <Link
+                      to="/charts/sector"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsAnalysisOpen(false)}
+                    >
+                      Sector Allocation
+                    </Link>
+                    <div className="border-t border-gray-600 my-1"></div>
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      Income Analysis
+                    </div>
+                    <Link
                       to="/charts/dividends"
                       className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
                       role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
+                      onClick={() => setIsAnalysisOpen(false)}
                     >
                       Dividend History
                     </Link>
@@ -142,7 +173,7 @@ const ButtonizedNavbar: React.FC = () => {
                       to="/dividend-calendar"
                       className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
                       role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
+                      onClick={() => setIsAnalysisOpen(false)}
                     >
                       Dividend Calendar
                     </Link>
@@ -150,7 +181,7 @@ const ButtonizedNavbar: React.FC = () => {
                       to="/dividend-predictions"
                       className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
                       role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
+                      onClick={() => setIsAnalysisOpen(false)}
                     >
                       Dividend Predictions
                     </Link>
@@ -158,42 +189,26 @@ const ButtonizedNavbar: React.FC = () => {
                       to="/charts/income"
                       className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
                       role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
+                      onClick={() => setIsAnalysisOpen(false)}
                     >
-                      Income
-                    </Link>
-                    <Link
-                      to="/charts/portfolio"
-                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
-                      role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
-                    >
-                      Portfolio Performance
-                    </Link>
-                    <Link
-                      to="/charts/sector"
-                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
-                      role="menuitem"
-                      onClick={() => setIsChartsOpen(false)}
-                    >
-                      Sector Allocation
+                      Income Charts
                     </Link>
                   </div>
                 </div>
               )}
             </div>
             
-            {/* Settings Dropdown */}
-            <div className="relative dropdown-container">
+            {/* 3. TOOLS & SETTINGS - Utilities and configuration */}
+            <div className="relative dropdown-container border-r border-gray-600 px-2">
               <Button
                 onClick={() => {
-                  setIsSettingsOpen(!isSettingsOpen);
-                  setIsChartsOpen(false);
+                  setIsToolsOpen(!isToolsOpen);
+                  setIsAnalysisOpen(false);
                   setIsModellingOpen(false);
                 }}
                 isDropdown
               >
-                Settings
+                Tools & Settings
                 <svg
                   className="ml-2 h-5 w-5"
                   xmlns="http://www.w3.org/2000/svg"
@@ -209,37 +224,44 @@ const ButtonizedNavbar: React.FC = () => {
                 </svg>
               </Button>
 
-              {isSettingsOpen && (
+              {isToolsOpen && (
                 <div className="absolute left-0 top-full mt-2 w-48 rounded-lg shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 z-10">
                   <div className="py-1" role="menu" aria-orientation="vertical">
-                    <Link
-                      to="/settings/scheduler"
-                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
-                      role="menuitem"
-                      onClick={() => setIsSettingsOpen(false)}
-                    >
-                      Scheduler
-                    </Link>
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      Data Management
+                    </div>
                     <Link
                       to="/settings/securities"
                       className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
                       role="menuitem"
-                      onClick={() => setIsSettingsOpen(false)}
+                      onClick={() => setIsToolsOpen(false)}
                     >
                       Securities
+                    </Link>
+                    <div className="border-t border-gray-600 my-1"></div>
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      Automation
+                    </div>
+                    <Link
+                      to="/settings/scheduler"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsToolsOpen(false)}
+                    >
+                      Scheduler
                     </Link>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Modelling Dropdown */}
-            <div className="relative dropdown-container">
+            {/* 4. MODELLING - Advanced analysis */}
+            <div className="relative dropdown-container pl-2">
               <Button
                 onClick={() => {
                   setIsModellingOpen(!isModellingOpen);
-                  setIsChartsOpen(false);
-                  setIsSettingsOpen(false);
+                  setIsAnalysisOpen(false);
+                  setIsToolsOpen(false);
                 }}
                 isDropdown
               >
@@ -308,24 +330,47 @@ const ButtonizedNavbar: React.FC = () => {
       {/* Mobile menu - collapsed by default */}
       <div className="md:hidden">
         <div className="pt-2 pb-3 space-y-2">
-          <Button to="/transactions" className="block mx-2">Transactions</Button>
-          <Button to="/holdings" className="block mx-2">Holdings</Button>
-          <Button to="/portfolio-balance" className="block mx-2">Portfolio Balance</Button>
-          <Button to="/lot-manager" className="block mx-2">Lot Manager</Button>
-          {/* Mobile Charts submenu */}
-          <div className="block mx-2">
-            <Button className="w-full text-left">Charts</Button>
-            {/* Add mobile-optimized dropdown here if needed */}
+          {/* Portfolio Management */}
+          <div className="border-b border-gray-600 pb-2">
+            <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              Portfolio Management
+            </div>
+            <Button to="/transactions" className="block mx-2">Transactions</Button>
+            <Button to="/holdings" className="block mx-2">Holdings</Button>
+            <Button to="/portfolio-balance" className="block mx-2">Portfolio Balance</Button>
+            <Button to="/lot-manager" className="block mx-2">Lot Manager</Button>
           </div>
-          {/* Mobile Settings submenu */}
-          <div className="block mx-2">
-            <Button className="w-full text-left">Settings</Button>
-            {/* Add mobile-optimized dropdown here if needed */}
+          
+          {/* Analysis & Charts */}
+          <div className="border-b border-gray-600 pb-2">
+            <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              Analysis & Charts
+            </div>
+            <Button to="/charts/portfolio" className="block mx-2">Portfolio Performance</Button>
+            <Button to="/charts/allocation" className="block mx-2">Allocation Grid</Button>
+            <Button to="/charts/sector" className="block mx-2">Sector Allocation</Button>
+            <Button to="/charts/dividends" className="block mx-2">Dividend History</Button>
+            <Button to="/dividend-calendar" className="block mx-2">Dividend Calendar</Button>
+            <Button to="/dividend-predictions" className="block mx-2">Dividend Predictions</Button>
+            <Button to="/charts/income" className="block mx-2">Income Charts</Button>
           </div>
-          {/* Mobile Modelling submenu */}
-          <div className="block mx-2">
-            <Button className="w-full text-left">Modelling</Button>
-            {/* Add mobile-optimized dropdown here if needed */}
+          
+          {/* Tools & Settings */}
+          <div className="border-b border-gray-600 pb-2">
+            <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              Tools & Settings
+            </div>
+            <Button to="/settings/securities" className="block mx-2">Securities</Button>
+            <Button to="/settings/scheduler" className="block mx-2">Scheduler</Button>
+          </div>
+          
+          {/* Modelling */}
+          <div>
+            <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              Modelling
+            </div>
+            <Button to="/modelling/mpt" className="block mx-2">MPT Modelling</Button>
+            <Button to="/modelling/results-explorer" className="block mx-2">Results Explorer</Button>
           </div>
         </div>
       </div>
