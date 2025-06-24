@@ -8,12 +8,12 @@
 /**
  * ReturnChart Component
  * 
- * Bar chart visualization of investment returns over time. Shows both realized
- * and unrealized returns, with options to view different time periods and
- * compare against benchmarks.
+ * Line chart visualization of investment returns over time. Shows return percentages
+ * over time with interactive tooltips and responsive design. Includes date range selection.
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import {
   LineChart,
   Line,
@@ -30,10 +30,10 @@ interface ReturnData {
 }
 
 interface ReturnChartProps {
-  data: ReturnData[];
-  isLoading: boolean;
   symbol: string;
 }
+
+type TimeFrame = '6M' | '1Y' | '2Y' | 'ALL';
 
 // Helper to parse YYYY-MM-DD as local date
 const parseLocalDate = (dateString: string) => {
@@ -41,7 +41,57 @@ const parseLocalDate = (dateString: string) => {
   return new Date(year, month - 1, day);
 };
 
-export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading, symbol }) => {
+export const ReturnChart: React.FC<ReturnChartProps> = ({ symbol }) => {
+  const [data, setData] = useState<ReturnData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [timeFrame, setTimeFrame] = useState<TimeFrame>('1Y');
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!symbol) return;
+      
+      try {
+        setIsLoading(true);
+        
+        // Calculate days based on timeFrame
+        let days = 365; // default
+        switch (timeFrame) {
+          case '6M':
+            days = 180;
+            break;
+          case '1Y':
+            days = 365;
+            break;
+          case '2Y':
+            days = 730;
+            break;
+          case 'ALL':
+            days = 3650; // 10 years as "ALL"
+            break;
+        }
+        
+        const response = await axios.get(`/api/positions/${symbol}/returns?days=${days}`);
+        
+        // Transform the data to match our interface
+        const transformedData = response.data.map((item: any) => ({
+          date: item.date,
+          return_percent: item.return_percent,
+        }));
+        
+        setData(transformedData);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+        console.error('Error fetching return data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [symbol, timeFrame]);
+
   if (isLoading) {
     return (
       <div className="bg-gray-900/50 rounded-lg p-6 h-[400px]">
@@ -52,9 +102,37 @@ export const ReturnChart: React.FC<ReturnChartProps> = ({ data, isLoading, symbo
     );
   }
 
+  if (error) {
+    return (
+      <div className="bg-gray-900/50 rounded-lg p-6 h-[400px]">
+        <h2 className="text-lg font-semibold mb-4 text-white">{symbol}: Return Over Time</h2>
+        <div className="h-full flex items-center justify-center">
+          <div className="text-red-400">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gray-900/50 rounded-lg p-6 h-[400px]">
-      <h2 className="text-lg font-semibold mb-4 text-white">{symbol}: Return Over Time</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold text-white">{symbol}: Return Over Time</h2>
+        <div className="flex space-x-2">
+          {(['6M', '1Y', '2Y', 'ALL'] as TimeFrame[]).map((tf) => (
+            <button
+              key={tf}
+              onClick={() => setTimeFrame(tf)}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                timeFrame === tf
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
