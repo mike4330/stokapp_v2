@@ -11,7 +11,6 @@ import axios from 'axios';
 import EditTransactionModal from '../components/EditTransactionModal';
 import PriceHistoryChart from '../components/PriceHistoryChart';
 import { ReturnChart } from '../components/ReturnChart';
-import { useSymbolReturns } from '../hooks/useSymbolReturns';
 import { PositionDetails } from '../components/PositionDetails';
 import MarketValueChart from '../components/MarketValueChart';
 
@@ -59,7 +58,6 @@ const PositionInfo: React.FC = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [logoError, setLogoError] = useState(false);
-  const { data: returnData, isLoading: returnDataLoading } = useSymbolReturns(symbol);
 
   const handleNavigate = useCallback(async (direction: 'next' | 'prev') => {
     if (direction === 'next' && currentIndex < allPositions.length - 1) {
@@ -263,7 +261,7 @@ const PositionInfo: React.FC = () => {
           <div className="h-[400px]">
             <PriceHistoryChart symbol={symbol || ''} />
           </div>
-          <ReturnChart data={returnData} isLoading={returnDataLoading} symbol={symbol || ''} />
+          <ReturnChart symbol={symbol || ''} />
         </div>
 
         {/* Market Value Chart */}

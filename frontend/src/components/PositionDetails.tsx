@@ -41,7 +41,7 @@ export const PositionDetails: React.FC<PositionDetailsProps> = ({
   onNavigate 
 }) => {
   const totalReturn = position.unrealized_gain + position.realized_pl + position.total_dividends;
-  const totalReturnPercent = (totalReturn / (position.cost_basis * position.units)) * 100;
+  const totalReturnPercent = position.cost_basis > 0 ? (totalReturn / position.cost_basis) * 100 : 0;
 
   return (
     <div>
