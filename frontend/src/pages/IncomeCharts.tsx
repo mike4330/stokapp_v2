@@ -177,7 +177,7 @@ const IncomeCharts: React.FC = () => {
               <XAxis 
                 dataKey="date" 
                 tick={{ fontSize: 11, fill: '#FFF' }}
-                tickFormatter={(date) => new Date(date).toLocaleDateString()}
+                tickFormatter={(date) => date}
               />
               <YAxis 
                 tickFormatter={(value) => `$${value.toLocaleString()}`}
@@ -185,7 +185,7 @@ const IncomeCharts: React.FC = () => {
               />
               <Tooltip 
                 formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                labelFormatter={(date) => new Date(date).toLocaleDateString()}
+                labelFormatter={(date) => date}
               />
               <Legend />
               <Bar dataKey="dividends" name="Dividends" stackId="a" fill="#2929c0" />
