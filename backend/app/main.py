@@ -9,6 +9,8 @@ from typing import Optional, Dict, Any
 from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings
+# Import the new logging configuration
+from app.core.logging_config import logger as root_logger
 from app.api.routes import router as api_router
 from app.api.crudroutes import router as crud_router
 from app.api.dividend_routes import router as dividend_router
@@ -25,15 +27,7 @@ from .mpt_modeling import (
 )
 from app.api.secroutes import router as sec_router
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("app.log"),
-        logging.StreamHandler()
-    ]
-)
+# Use the configured logger
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="MPMV2 API")

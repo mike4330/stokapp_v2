@@ -211,7 +211,43 @@ def get_holdings(group_by_account: bool = False, db: Session = Depends(get_db)):
             price = crud.get_price_by_symbol(db, symbol)
             if not price:
                 continue  # Skip if no price data
-            
+
+            # Step 3.5: Get previous close from security_values
+            prev_close = None
+            try:
+                prev_close_query = text("""
+                    SELECT close FROM security_values
+                    WHERE symbol = :symbol
+                    ORDER BY timestamp DESC
+                    LIMIT 2
+                """)
+                prev_close_results = db.execute(prev_close_query, {"symbol": symbol}).fetchall()
+                if len(prev_close_results) == 2:
+                    prev_close = float(prev_close_results[1][0]) if prev_close_results[1][0] is not None else None
+                else:
+                    prev_close = None
+            except Exception as e:
+                prev_close = None
+
+            price_change = None
+            price_change_pct = None
+            if prev_close is not None and prev_close != 0:
+                price_change = float(price.price) - prev_close
+                price_change_pct = (price_change / prev_close) * 100
+
+            # Step 3.6: Get moving averages (mean50, mean200) from prices table
+            ma50 = getattr(price, 'mean50', None)
+            ma200 = getattr(price, 'mean200', None)
+
+            # Step 3.7: Get overamt from MPT table
+            overamt = None
+            try:
+                mpt_row = db.execute(text("SELECT overamt FROM MPT WHERE symbol = :symbol"), {"symbol": symbol}).fetchone()
+                if mpt_row and mpt_row[0] is not None:
+                    overamt = float(mpt_row[0])
+            except Exception as e:
+                overamt = None
+
             # Step 4: Calculate market value and other fields
             if group_by_account:
                 for result in units_results:
@@ -231,7 +267,12 @@ def get_holdings(group_by_account: bool = False, db: Session = Depends(get_db)):
                             current_price=current_price,
                             position_value=market_value,
                             unrealized_gain=gain_loss,
-                            unrealized_gain_percent=gain_loss_pct
+                            unrealized_gain_percent=gain_loss_pct,
+                            price_change=price_change,
+                            price_change_pct=price_change_pct,
+                            ma50=ma50,
+                            ma200=ma200,
+                            overamt=overamt
                         ))
             else:
                 net_units = float(units_results[0][0])
@@ -249,7 +290,12 @@ def get_holdings(group_by_account: bool = False, db: Session = Depends(get_db)):
                     current_price=current_price,
                     position_value=market_value,
                     unrealized_gain=gain_loss,
-                    unrealized_gain_percent=gain_loss_pct
+                    unrealized_gain_percent=gain_loss_pct,
+                    price_change=price_change,
+                    price_change_pct=price_change_pct,
+                    ma50=ma50,
+                    ma200=ma200,
+                    overamt=overamt
                 ))
         
         return holdings
@@ -292,42 +338,60 @@ def get_transactions(skip: int = 0, limit: int = 500, db: Session = Depends(get_
 
 @router.get("/sector-allocation")
 def get_sector_allocation(db: Session = Depends(get_db)):
-    """Get sector allocation data"""
+    """Get sector allocation data using the 'sectors' table as the master list."""
     try:
-        # Get all holdings
-        holdings = get_holdings(db=db)
-        
-        # Group by sector
-        sector_data = {}
+        # Get all distinct sectors from the sectors table
+        sector_rows = db.execute(text("SELECT DISTINCT sector FROM sectors WHERE sector IS NOT NULL AND sector != ''")).fetchall()
+        master_sectors = [row[0] for row in sector_rows]
+
+        # Get all holdings with their position value
+        holdings_query = text("""
+            WITH holdings AS (
+                SELECT 
+                    p.symbol,
+                    SUM(CASE
+                        WHEN t.units_remaining IS NULL THEN t.units
+                        ELSE t.units_remaining
+                    END) as net_units,
+                    p.price as current_price
+                FROM prices p
+                JOIN transactions t ON p.symbol = t.symbol
+                WHERE t.xtype = 'Buy'
+                AND t.disposition IS NULL
+                GROUP BY p.symbol
+                HAVING net_units > 0
+            )
+            SELECT h.symbol, (h.net_units * h.current_price) as position_value
+            FROM holdings h
+        """)
+        holdings = db.execute(holdings_query).fetchall()
+
+        # Map symbol to sector using the sectors table
+        symbol_to_sector = dict(db.execute(text("SELECT symbol, sector FROM sectors WHERE sector IS NOT NULL AND sector != ''")).fetchall())
+
+        # Aggregate by sector
+        sector_data = {sector: {"sector": sector, "value": 0, "percentage": 0} for sector in master_sectors}
+        sector_data["Unknown"] = {"sector": "Unknown", "value": 0, "percentage": 0}
         total_value = 0
-        
-        for holding in holdings:
-            # Get sector info for this symbol
-            sector_query = text("""
-                SELECT sector FROM MPT WHERE symbol = :symbol
-            """)
-            result = db.execute(sector_query, {"symbol": holding.symbol}).fetchone()
-            sector = result[0] if result else "Unknown"
-            
-            if sector not in sector_data:
-                sector_data[sector] = {"sector": sector, "value": 0, "percentage": 0}
-            
-            sector_data[sector]["value"] += holding.position_value
-            total_value += holding.position_value
-        
+
+        for symbol, position_value in holdings:
+            sector = symbol_to_sector.get(symbol, "Unknown")
+            sector_data[sector]["value"] += position_value
+            total_value += position_value
+
         # Calculate percentages
         for sector in sector_data.values():
             sector["percentage"] = (sector["value"] / total_value * 100) if total_value > 0 else 0
-        
+
         # Convert to list and sort by value descending
         sector_list = list(sector_data.values())
+        sector_list = [s for s in sector_list if s["value"] > 0]
         sector_list.sort(key=lambda x: x["value"], reverse=True)
-        
+
         return {
             "sectors": sector_list,
             "total_value": total_value
         }
-        
     except Exception as e:
         logging.error(f"Error in get_sector_allocation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

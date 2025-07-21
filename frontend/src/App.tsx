@@ -28,9 +28,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import './App.css';
 import IncomeCharts from './pages/IncomeCharts';
 import SecurityManagement from './pages/SecurityManagement';
-
-// Placeholder components for routes
-const DividendCharts = () => <div className="p-4">Dividend History Charts</div>;
+import DividendCharts from './pages/DividendCharts';
 
 const COLORS = [
   '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28CFF', '#FF6699', '#33CC99', '#FF4444', '#FFB347', '#B6D7A8',

@@ -35,7 +35,7 @@ def update_prices():
     logger.info("Starting price update task")
     
     # Create a cached session for yfinance to reduce API load
-    session = requests_cache.CachedSession("yfinance.cache", expire_after=45)
+    #session = requests_cache.CachedSession("yfinance.cache", expire_after=45)
     
     now = datetime.now()
     logger.info(f"Price updater starting at {now.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -48,7 +48,7 @@ def update_prices():
     db = next(get_db())
     try:
         # Get all symbols to update
-        symbol_query = text("SELECT DISTINCT symbol FROM transactions ORDER BY symbol")
+        symbol_query = text("SELECT DISTINCT symbol FROM prices ORDER BY symbol")
         result = db.execute(symbol_query)
         tickers = [row[0] for row in result]
         
@@ -69,7 +69,7 @@ def update_prices():
             
             for ticker in tickers:
                 # Skip certain funds after 10 AM (as in the original code)
-                if now.hour > 10 and ticker in ['FNBGX', 'FAGIX', 'FDGFX']:
+                if now.hour > 11 and ticker in ['FNBGX', 'FAGIX', 'FDGFX']:
                     continue
                     
                 try:

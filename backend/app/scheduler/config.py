@@ -28,7 +28,7 @@ import signal
 import atexit
 from pathlib import Path
 
-# Configure logging for the scheduler
+# Use the shared logging configuration
 scheduler_logger = logging.getLogger('apscheduler')
 scheduler_logger.setLevel(logging.INFO)
 
@@ -37,10 +37,10 @@ US_EASTERN = timezone('US/Eastern')
 MARKET_OPEN_HOUR = 9  # 9:30 AM ET is standard market open, using 9 to be safe
 MARKET_CLOSE_HOUR = 16  # 4:00 PM ET is standard market close
 
-# Create executors
+# Create executors with reduced worker counts to minimize file handles
 executors = {
-    'default': ThreadPoolExecutor(max_workers=5),
-    'processpool': ProcessPoolExecutor(max_workers=3)
+    'default': ThreadPoolExecutor(max_workers=2),  # Reduced from 5 to 2
+    'processpool': ProcessPoolExecutor(max_workers=1)  # Reduced from 3 to 1
 }
 
 # Configure job defaults

@@ -75,4 +75,19 @@ def register_jobs(scheduler: BackgroundScheduler):
     )
     logger.info("Registered job: xag_price_job (runs daily at 3:30 PM ET, weekdays only)")
     
+    # Register the BTC price update job to run every hour on weekdays only
+    scheduler.add_job(
+        func=tasks_module.btc_price_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",  # Monday through Friday only
+            hour="*",  # Every hour
+            minute="0",  # At minute 0
+            timezone=US_EASTERN
+        ),
+        id="btc_price_job",
+        name="Update BTC-USD Price and Moving Averages (BTC)",
+        replace_existing=True
+    )
+    logger.info("Registered job: btc_price_job (runs every hour on the hour, weekdays only)")
+    
     # Add additional jobs here as needed 

@@ -109,7 +109,17 @@ const HoldingRow = React.memo(({
       {((holding.position_value / totalValue) * 100).toFixed(2)}%
     </td>
     <td className="table-cell-standard font-mono">
-      {holding.overamt?.toFixed(2) || 'N/A'}
+      {holding.overamt !== null && holding.overamt !== undefined ? (
+        <span className={
+          holding.overamt > 0
+            ? 'text-green-600 dark:text-green-400'
+            : holding.overamt < 0
+            ? 'text-red-600 dark:text-red-400'
+            : ''
+        }>
+          {holding.overamt > 0 ? '+' : ''}{holding.overamt.toFixed(2)}
+        </span>
+      ) : 'N/A'}
     </td>
     <td className="table-cell-standard font-mono">
       {holding.unrealized_gain !== undefined && holding.unrealized_gain !== null ? (
