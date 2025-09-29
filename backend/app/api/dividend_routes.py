@@ -85,6 +85,13 @@ async def get_symbol_prediction(
         if not history:
             raise HTTPException(status_code=404, detail=f"No dividend history found for {symbol}")
         
+        # Require at least 3 datapoints for reliable predictions
+        if len(history) < 3:
+            raise HTTPException(
+                status_code=422, 
+                detail=f"Insufficient data for {symbol} - need at least 3 datapoints, found {len(history)}"
+            )
+        
         # Calculate predictions using linear regression
         dividend_amounts = [entry["cost"] for entry in history]
         dividend_count = len(dividend_amounts)

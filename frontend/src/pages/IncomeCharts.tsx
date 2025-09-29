@@ -135,7 +135,7 @@ const IncomeCharts: React.FC = () => {
                   label={renderCustomizedLabel}
                 >
                   {dividendsData.map((entry, idx) => (
-                    <Cell key={`cell-div-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                    <Cell key={`cell-div-${idx}`} fill={COLORS[idx % COLORS.length]} stroke="none" />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -159,7 +159,7 @@ const IncomeCharts: React.FC = () => {
                   label={renderCustomizedLabel}
                 >
                   {realizedGainsData.map((entry, idx) => (
-                    <Cell key={`cell-gain-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                    <Cell key={`cell-gain-${idx}`} fill={COLORS[idx % COLORS.length]} stroke="none" />
                   ))}
                 </Pie>
                 <Tooltip />

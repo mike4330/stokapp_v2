@@ -157,6 +157,14 @@ const ButtonizedNavbar: React.FC = () => {
                     >
                       Sector Allocation
                     </Link>
+                    <Link
+                      to="/charts/sector-weights"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsAnalysisOpen(false)}
+                    >
+                      Sector Weights
+                    </Link>
                     <div className="border-t border-gray-600 my-1"></div>
                     <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                       Income Analysis
@@ -349,6 +357,7 @@ const ButtonizedNavbar: React.FC = () => {
             <Button to="/charts/portfolio" className="block mx-2">Portfolio Performance</Button>
             <Button to="/charts/allocation" className="block mx-2">Allocation Grid</Button>
             <Button to="/charts/sector" className="block mx-2">Sector Allocation</Button>
+            <Button to="/charts/sector-weights" className="block mx-2">Sector Weights</Button>
             <Button to="/charts/dividends" className="block mx-2">Dividend History</Button>
             <Button to="/dividend-calendar" className="block mx-2">Dividend Calendar</Button>
             <Button to="/dividend-predictions" className="block mx-2">Dividend Predictions</Button>

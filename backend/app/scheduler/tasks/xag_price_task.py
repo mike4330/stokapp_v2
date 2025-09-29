@@ -1,9 +1,11 @@
 """Task for updating XAG (Silver) prices."""
 import requests
-import sqlite3
 import logging
 from datetime import datetime
 from app.core.config import settings
+from app.db.session import get_db
+from app.models.models import Price
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,6 @@ def update_xag_price():
 
         base_currency = "USD"
         target_currency = "XAG"
-        database_file = settings.DB_PATH  # Use DB_PATH directly
 
         url = f"https://api.metalpriceapi.com/v1/latest?api_key={api_key}&base={base_currency}&currencies={target_currency}"
 
@@ -36,32 +37,41 @@ def update_xag_price():
         field_value = 1/(data["rates"][target_currency])
         ts = data["timestamp"]
 
-        # Connect to the SQLite database
-        conn = sqlite3.connect(database_file)
-        cursor = conn.cursor()
+        # Use SQLAlchemy session for thread-safe database access
+        db = next(get_db())
+        try:
+            # Check if XAG already exists in the prices table
+            existing_price = db.query(Price).filter(Price.symbol == target_currency).first()
 
-        # Update the prices table
-        sql = """
-            UPDATE prices
-            SET price = ?, lastupdate = ?
-            WHERE symbol = ?
-        """
-        cursor.execute(sql, (field_value, ts, target_currency))
-        conn.commit()
+            if existing_price:
+                # Update existing record
+                existing_price.price = field_value
+                existing_price.lastupdate = ts
+            else:
+                # Insert new record
+                new_price = Price(
+                    symbol=target_currency,
+                    price=field_value,
+                    lastupdate=ts,
+                    asset_class='METAL'
+                )
+                db.add(new_price)
 
-        logger.info(f"{ts} Successfully updated price for {target_currency}: {field_value}")
-        return True
+            db.commit()
+
+            logger.info(f"{ts} Successfully updated price for {target_currency}: {field_value}")
+            return True
+
+        except Exception as db_error:
+            db.rollback()
+            logger.exception(f"Database error updating XAG price: {str(db_error)}")
+            return False
+        finally:
+            db.close()
 
     except requests.RequestException as e:
         logger.error(f"API request failed: {str(e)}")
         return False
-    except sqlite3.Error as e:
-        logger.error(f"Database error: {str(e)}")
-        return False
     except Exception as e:
         logger.exception(f"Unexpected error updating XAG price: {str(e)}")
-        return False
-    finally:
-        if 'conn' in locals():
-            cursor.close()
-            conn.close() 
+        return False 

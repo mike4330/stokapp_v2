@@ -29,6 +29,7 @@ import './App.css';
 import IncomeCharts from './pages/IncomeCharts';
 import SecurityManagement from './pages/SecurityManagement';
 import DividendCharts from './pages/DividendCharts';
+import SectorWeights from './pages/SectorWeights';
 
 const COLORS = [
   '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28CFF', '#FF6699', '#33CC99', '#FF4444', '#FFB347', '#B6D7A8',
@@ -72,6 +73,7 @@ function App() {
             <Route path="/lot-manager" element={<LotManagerPage />} />
             <Route path="/charts/portfolio" element={<PortfolioPerformancePage />} />
             <Route path="/charts/sector" element={<SectorAllocationChart />} />
+            <Route path="/charts/sector-weights" element={<SectorWeights />} />
             <Route path="/charts/dividends" element={<DividendCharts />} />
             <Route path="/charts/income" element={<IncomeCharts />} />
             <Route path="/charts/allocation" element={<AllocationGrid />} />

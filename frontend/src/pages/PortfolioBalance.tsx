@@ -190,7 +190,7 @@ const PortfolioBalance: React.FC = () => {
 
       {/* Recommendations Grid */}
     
-      <div className="grid grid-cols-1 md:grid-cols-[2fr_3fr] gap-8 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-8 mb-8">
         {/* Buy Recommendations Section */}
         <div>
           <div className="flex justify-between items-center mb-6">
@@ -368,8 +368,8 @@ const PortfolioBalance: React.FC = () => {
                         {data.lots.map((lot, index) => (
                           <tr key={`${lot.symbol}-${lot.date}-${index}`}>
                             <td className="px-2 py-2 text-sm text-gray-900 dark:text-gray-300 break-words">{lot.account}</td>
-                            <td className="px-2 py-2 text-sm text-gray-900 dark:text-gray-300 break-words">
-                              {lot.is_long_term ? '✔ ' : ''}{new Date(lot.date).toLocaleDateString()}
+                            <td className="px-2 py-2 text-sm text-gray-900 dark:text-gray-300 whitespace-nowrap">
+                              {lot.is_long_term ? '✔ ' : ''}{new Date(lot.date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}
                             </td>
                             <td className="px-2 py-2 text-sm text-gray-900 dark:text-gray-300 break-words">{lot.units}</td>
                             <td className="px-2 py-2 text-sm text-gray-900 dark:text-gray-300 break-words">${lot.current_price.toFixed(2)}</td>

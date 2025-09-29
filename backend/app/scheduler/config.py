@@ -18,7 +18,7 @@ How to add a new scheduled job:
 See the README for more details and examples.
 """
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 import logging
@@ -40,7 +40,6 @@ MARKET_CLOSE_HOUR = 16  # 4:00 PM ET is standard market close
 # Create executors with reduced worker counts to minimize file handles
 executors = {
     'default': ThreadPoolExecutor(max_workers=2),  # Reduced from 5 to 2
-    'processpool': ProcessPoolExecutor(max_workers=1)  # Reduced from 3 to 1
 }
 
 # Configure job defaults

@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
@@ -17,7 +18,7 @@ engine = create_engine(
         "timeout": 20  # 20 second timeout for busy database
     },
     # Use StaticPool to maintain a single connection per thread
-    poolclass=StaticPool,
+    poolclass=NullPool,
     pool_pre_ping=True,  # Verify connections before use
     pool_recycle=3600,  # Recycle connections after 1 hour
     echo=False  # Set to True for SQL debugging (but creates more logs)
