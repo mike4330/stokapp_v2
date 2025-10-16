@@ -236,6 +236,18 @@ const ButtonizedNavbar: React.FC = () => {
                 <div className="absolute left-0 top-full mt-2 w-48 rounded-lg shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 z-10">
                   <div className="py-1" role="menu" aria-orientation="vertical">
                     <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      Reports
+                    </div>
+                    <Link
+                      to="/settings/excess-lots"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsToolsOpen(false)}
+                    >
+                      Excess Lots
+                    </Link>
+                    <div className="border-t border-gray-600 my-1"></div>
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                       Data Management
                     </div>
                     <Link
@@ -369,6 +381,7 @@ const ButtonizedNavbar: React.FC = () => {
             <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
               Tools & Settings
             </div>
+            <Button to="/settings/excess-lots" className="block mx-2">Excess Lots</Button>
             <Button to="/settings/securities" className="block mx-2">Securities</Button>
             <Button to="/settings/scheduler" className="block mx-2">Scheduler</Button>
           </div>

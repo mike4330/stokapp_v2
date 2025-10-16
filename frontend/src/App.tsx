@@ -30,6 +30,7 @@ import IncomeCharts from './pages/IncomeCharts';
 import SecurityManagement from './pages/SecurityManagement';
 import DividendCharts from './pages/DividendCharts';
 import SectorWeights from './pages/SectorWeights';
+import ExcessLots from './pages/ExcessLots';
 
 const COLORS = [
   '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28CFF', '#FF6699', '#33CC99', '#FF4444', '#FFB347', '#B6D7A8',
@@ -81,6 +82,7 @@ function App() {
             <Route path="/dividend-calendar" element={<DividendCalendar />} />
             <Route path="/settings/scheduler" element={<SchedulerSettings />} />
             <Route path="/settings/securities" element={<SecurityManagement />} />
+            <Route path="/settings/excess-lots" element={<ExcessLots />} />
             <Route path="/analyze/:runId" element={<PortfolioAnalyzer />} />
           </Routes>
         </main>

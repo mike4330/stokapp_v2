@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from curl_cffi import requests
 
 from app.db.session import get_db
+from app.api.portfolio_stream_routes import calculate_portfolio_value, notify_portfolio_update
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +102,21 @@ def update_prices():
                         "ticker": ticker
                     })
                     db.commit()
-                    
+
+                    # Calculate and broadcast updated portfolio value after each price update
+                    try:
+                        portfolio_value = calculate_portfolio_value(db)
+                        notify_portfolio_update(portfolio_value)
+                        logger.debug(f"Portfolio value updated after {ticker}: ${portfolio_value:,.2f}")
+                    except Exception as e:
+                        logger.error(f"Error calculating/broadcasting portfolio value for {ticker}: {e}")
+                        # Rollback the session if portfolio calculation failed
+                        db.rollback()
+
                 except Exception as e:
                     logger.error(f"Error updating price for {ticker}: {str(e)}")
+                    # Rollback the session on any error to prevent 'prepared' state issues
+                    db.rollback()
                     continue
                 
                 # Random wait between symbols (as in the original code)
@@ -113,7 +126,7 @@ def update_prices():
             # Calculate elapsed time for this cycle
             elapsed = round((time.time() - starttime), 1)
             logger.info(f"Finished price update cycle. Elapsed time: {elapsed}s")
-            
+
             # Random wait between cycles (as in the original code)
             cyclewait = randint(15, 45)
             logger.info(f"Waiting {cyclewait}s before next cycle")

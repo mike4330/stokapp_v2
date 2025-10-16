@@ -51,7 +51,11 @@ This is the FastAPI backend for the Stock Portfolio Tracker application, providi
 
 ### Analysis
 - `GET /sector-allocation` - Get sector allocation data
-- `GET /model-recommendations` - Get model-based recommendations
+- `GET /model-recommendations` - Get model-based buy recommendations (uses StandardScaler with weighted multi-factor scoring)
+  - **Note:** This endpoint is the single source of truth for buy recommendations
+  - Used by external trading systems (e.g., `/var/www/html/portfolio/tasty/orderv2.py`)
+  - Returns top 15 underweight positions ranked by z-score
+  - Handles PE=0 stocks correctly by excluding PE_diff term
 - `GET /portfolio/historical` - Get historical portfolio data
 - `GET /portfolio/returns` - Get portfolio returns data
 - `GET /portfolio/sunburst` - Get portfolio visualization data

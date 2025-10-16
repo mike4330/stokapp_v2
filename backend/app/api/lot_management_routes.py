@@ -167,4 +167,78 @@ def get_potential_lots(
 
     except Exception as e:
         logging.error(f"Error in get_potential_lots: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/excess-lots")
+def get_excess_lots(db: Session = Depends(get_db)):
+    """Get open lots for symbols with target_alloc = 0 in MPT table and P/L > -1%"""
+    try:
+        # First get current prices
+        price_query = text("SELECT symbol, price FROM prices")
+        price_result = db.execute(price_query)
+        current_prices = {row[0]: row[1] for row in price_result}
+
+        # Get symbols with target_alloc = 0
+        zero_alloc_query = text("""
+            SELECT DISTINCT symbol
+            FROM MPT
+            WHERE target_alloc = 0
+        """)
+        zero_alloc_result = db.execute(zero_alloc_query)
+        zero_alloc_symbols = {row[0] for row in zero_alloc_result}
+
+        # Get all open lots
+        lots = crud.get_open_lots(db)
+        today = datetime.now().date()
+
+        excess_lots = []
+
+        for lot in lots:
+            # Filter: only symbols with target_alloc = 0
+            if lot.symbol not in zero_alloc_symbols:
+                continue
+
+            # Calculate P/L percentage
+            if lot.price is None or lot.symbol not in current_prices:
+                continue
+
+            units = float(lot.units_remaining or lot.units)
+            current_price = current_prices.get(lot.symbol, 0)
+            lot_basis = units * float(lot.price)
+            current_value = units * current_price
+            profit_loss = current_value - lot_basis
+            pl_pct = (profit_loss / lot_basis * 100) if lot_basis > 0 else 0
+
+            # Filter: P/L > -1%
+            if pl_pct <= -1:
+                continue
+
+            # Calculate term
+            term = "Short-term"
+            if lot.date_new is not None and isinstance(lot.date_new, str):
+                purchase_date = datetime.strptime(lot.date_new, '%Y-%m-%d').date()
+                if (today - purchase_date).days > 365:
+                    term = "Long-term"
+
+            excess_lots.append({
+                "id": lot.id,
+                "acct": lot.acct,
+                "symbol": lot.symbol,
+                "date_new": lot.date_new,
+                "units_remaining": units,
+                "price": float(lot.price),
+                "lot_basis": round(lot_basis, 2),
+                "current_value": round(current_value, 2),
+                "profit_loss": round(profit_loss, 2),
+                "pl_pct": round(pl_pct, 2),
+                "term": term
+            })
+
+        # Sort by P/L percentage descending
+        excess_lots.sort(key=lambda x: x["pl_pct"], reverse=True)
+
+        return excess_lots
+
+    except Exception as e:
+        logging.error(f"Error in get_excess_lots: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) 
