@@ -81,16 +81,19 @@
 
 ## Documentation Directory (`docs/`)
 - **Key Files**:
+  - **README.md**: Documentation index and overview.
+  - **INTERNALS.md**: Technical implementation details, internal workflows, calculations, and development guidelines.
   - **MPT_System_Documentation.md**: Comprehensive documentation for the MPT Modeling System.
   - **forecast-calculation.md**: Documentation related to forecast calculations.
-  - **portfolio-tracker-project-doc.md**: Detailed project documentation for the portfolio tracker.
-  - **schema.txt**: Likely a reference for data or API schemas.
+  - **File_Structure_Documentation.md**: This file - complete project file structure reference.
+  - **schema.txt**: Reference for data or API schemas.
   - **sec_data_enrichment.md**: Documentation for the SEC data retrieval and display system.
   - **sec_data_technical_notes.md**: Technical implementation details for the SEC data system.
   - **sec_rule_evaluation.md**: Documentation for the SEC financial red flag detection system.
 - **Directories**:
+  - **archive/**: Historical project planning documents.
   - **components/**: Documentation for specific components (contents not fully explored).
-  - **api/**: API-specific documentation (contents not fully explored).
+  - **api/**: API-specific documentation (e.g., optimization.md).
   - **diagrams/**: Diagrams and visual aids (contents not fully explored).
 
 ## Summary

@@ -178,6 +178,8 @@ const Holdings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<SortColumn>('symbol');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [livePortfolioValue, setLivePortfolioValue] = useState<number | null>(null);
+  const [isLiveUpdating, setIsLiveUpdating] = useState(false);
   
   // Memoize API request to prevent creating new functions on each render
   const fetchHoldings = useCallback(async () => {
@@ -204,12 +206,47 @@ const Holdings: React.FC = () => {
 
   useEffect(() => {
     const controller = fetchHoldings();
-    
+
     // Clean up request on unmount
     return () => {
       controller.then(c => c.abort());
     };
   }, [fetchHoldings]);
+
+  // Polling for live portfolio value updates during market hours
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    // Only poll during market hours (9:30 AM - 4:00 PM ET)
+    const now = new Date();
+    const hour = now.getHours();
+
+    // Poll if during market hours (adjust timezone as needed)
+    if (hour >= 9 && hour < 16) {
+      setIsLiveUpdating(true);
+
+      // Poll every 3 seconds
+      intervalId = setInterval(async () => {
+        try {
+          const response = await axios.get('/api/portfolio-value');
+          if (response.data.total_value !== undefined) {
+            setLivePortfolioValue(response.data.total_value);
+          }
+        } catch (err) {
+          console.error('Error fetching live portfolio value:', err);
+          setIsLiveUpdating(false);
+        }
+      }, 3000);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        setIsLiveUpdating(false);
+      }
+    };
+  }, []);
 
   // Memoize sort handler to prevent recreating on each render
   const handleSort = useCallback((column: SortColumn) => {
@@ -221,11 +258,13 @@ const Holdings: React.FC = () => {
     }
   }, [sortColumn, sortDirection]);
 
-  // Memoize totalValue calculation
-  const totalValue = useMemo(() => 
-    holdings.reduce((sum, holding) => sum + holding.position_value, 0),
-    [holdings]
-  );
+  // Memoize totalValue calculation - use live value if available
+  const totalValue = useMemo(() => {
+    if (livePortfolioValue !== null && isLiveUpdating) {
+      return livePortfolioValue;
+    }
+    return holdings.reduce((sum, holding) => sum + holding.position_value, 0);
+  }, [holdings, livePortfolioValue, isLiveUpdating]);
 
   // Memoize sorted holdings to prevent recalculation on every render
   const sortedHoldings = useMemo(() => {
@@ -300,13 +339,21 @@ const Holdings: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
           <div className="flex justify-between items-start">
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Portfolio Value</h3>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Portfolio Value</h3>
+                {isLiveUpdating && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                    <span className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-full animate-pulse"></span>
+                    Live
+                  </span>
+                )}
+              </div>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
                 ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <Link 
+            <Link
               to="/portfolio-details"
               className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
             >

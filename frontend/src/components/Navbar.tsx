@@ -320,6 +320,14 @@ const ButtonizedNavbar: React.FC = () => {
                     >
                       Results Explorer
                     </Link>
+                    <Link
+                      to="/modelling/performance"
+                      className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 hover:text-white rounded-md m-1 transition-colors duration-150"
+                      role="menuitem"
+                      onClick={() => setIsModellingOpen(false)}
+                    >
+                      Model Performance
+                    </Link>
                   </div>
                 </div>
               )}
@@ -393,6 +401,7 @@ const ButtonizedNavbar: React.FC = () => {
             </div>
             <Button to="/modelling/mpt" className="block mx-2">MPT Modelling</Button>
             <Button to="/modelling/results-explorer" className="block mx-2">Results Explorer</Button>
+            <Button to="/modelling/performance" className="block mx-2">Model Performance</Button>
           </div>
         </div>
       </div>

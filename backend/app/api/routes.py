@@ -213,19 +213,18 @@ def get_holdings(group_by_account: bool = False, db: Session = Depends(get_db)):
                 continue  # Skip if no price data
 
             # Step 3.5: Get previous close from security_values
+            # Use the most recent close as the previous close (last trading day)
             prev_close = None
             try:
                 prev_close_query = text("""
                     SELECT close FROM security_values
                     WHERE symbol = :symbol
-                    ORDER BY timestamp DESC
-                    LIMIT 2
+                    AND timestamp = (SELECT MAX(timestamp) FROM security_values WHERE symbol = :symbol)
+                    LIMIT 1
                 """)
-                prev_close_results = db.execute(prev_close_query, {"symbol": symbol}).fetchall()
-                if len(prev_close_results) == 2:
-                    prev_close = float(prev_close_results[1][0]) if prev_close_results[1][0] is not None else None
-                else:
-                    prev_close = None
+                prev_close_result = db.execute(prev_close_query, {"symbol": symbol}).fetchone()
+                if prev_close_result and prev_close_result[0] is not None:
+                    prev_close = float(prev_close_result[0])
             except Exception as e:
                 prev_close = None
 

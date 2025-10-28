@@ -143,27 +143,40 @@ const PortfolioPerformanceChart: React.FC = () => {
     return null;
   };
 
-  // Calculate an optimal Y-axis domain to better visualize the data
-  // This helps exaggerate changes by setting the bottom of the chart slightly below the minimum value
-  const calculateYDomain = (data: HistoricalDataPoint[]): [number, number] => {
-    if (!data || data.length === 0) return [0, 0];
-    
+  // Calculate nice round Y-axis ticks for better user experience
+  const calculateNiceYAxisConfig = (data: HistoricalDataPoint[]) => {
+    if (!data || data.length === 0) return { domain: [0, 0], ticks: [] };
+
     // Find min and max values across all data points
     const allValues = data.flatMap(d => [d.value, d.cost]);
-    const min = Math.min(...allValues);
-    const max = Math.max(...allValues);
-    
-    // Calculate the data range
-    const range = max - min;
-    
-    // Set the bottom of the domain to something less than min to exaggerate changes
-    // We'll use 85-90% of the minimum value to exaggerate without distorting too much
-    const bottomDomain = Math.max(0, min - (range * 0.15));  // More exaggeration
-    
-    // Give a little room at the top too
-    const topDomain = max + (range * 0.05);
-    
-    return [bottomDomain, topDomain];
+    const dataMin = Math.min(...allValues);
+    const dataMax = Math.max(...allValues);
+
+    // Calculate range and determine nice tick interval
+    const range = dataMax - dataMin;
+
+    // Determine tick interval based on range (nice round numbers)
+    let tickInterval;
+    if (range <= 1000) tickInterval = 100;        // $100 increments
+    else if (range <= 5000) tickInterval = 500;   // $500 increments
+    else if (range <= 10000) tickInterval = 1000; // $1k increments
+    else if (range <= 50000) tickInterval = 2500; // $2.5k increments
+    else tickInterval = 5000;                     // $5k increments
+
+    // Calculate nice domain bounds (round to nearest tick interval)
+    const domainMin = Math.floor(dataMin / tickInterval) * tickInterval;
+    const domainMax = Math.ceil(dataMax / tickInterval) * tickInterval;
+
+    // Generate explicit ticks array
+    const ticks = [];
+    for (let tick = domainMin; tick <= domainMax; tick += tickInterval) {
+      ticks.push(tick);
+    }
+
+    return {
+      domain: [domainMin, domainMax],
+      ticks
+    };
   };
 
   // Loading state
@@ -176,8 +189,8 @@ const PortfolioPerformanceChart: React.FC = () => {
     return <div className="text-red-500 text-center h-64 flex items-center justify-center">{error}</div>;
   }
 
-  // Calculate the optimal Y-axis domain for the chart
-  const yDomain = calculateYDomain(historicalData);
+  // Calculate nice Y-axis configuration for the chart
+  const yAxisConfig = calculateNiceYAxisConfig(historicalData);
 
   return (
     <div className="h-full flex flex-col">
@@ -228,10 +241,11 @@ const PortfolioPerformanceChart: React.FC = () => {
             />
             
             {/* Y-axis configuration */}
-            <YAxis 
+            <YAxis
               tickFormatter={value => `$${(value / 1000).toFixed(0)}k`} // Format as $XXk
               tick={{ fontSize: 11, fill: isDark ? '#F3F4F6' : '#374151' }}
-              domain={yDomain} // Custom domain from function
+              domain={yAxisConfig.domain} // Nice round domain bounds
+              ticks={yAxisConfig.ticks} // Explicit nice round ticks
               stroke="#888"
               width={45}
               axisLine={{ stroke: '#444', strokeWidth: 0.5 }}

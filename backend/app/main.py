@@ -26,6 +26,7 @@ from .mpt_modeling import (
     get_repository_run
 )
 from app.api.secroutes import router as sec_router
+from app.api.portfolio_stream_routes import router as portfolio_stream_router
 
 # Use the configured logger
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ app.include_router(dividend_router, prefix="/api")
 app.include_router(old_routes_router, prefix="/api")
 app.include_router(sec_router, prefix="/api")
 app.include_router(mpt_router, prefix="/api")
+app.include_router(portfolio_stream_router, prefix="/api")
 
 class OptimizationRequest(BaseModel):
     gamma: Optional[float] = None

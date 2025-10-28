@@ -1,0 +1,30 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/var/www/mpmv2/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [343] using StatReload
+INFO:     Started server process [377]
+INFO:     Waiting for application startup.
+2025-06-28 06:54:20,368 - app.main - INFO - Starting application
+2025-06-28 06:54:20,370 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-06-28 06:54:20,370 - app.scheduler.jobs - INFO - Registered job: update_overamt (runs every 5 minutes during market hours 9:00-16:00 ET, weekdays only)
+2025-06-28 06:54:20,370 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-06-28 06:54:20,370 - app.scheduler.jobs - INFO - Registered job: price_updater (runs daily at 9:35 AM ET, weekdays only)
+2025-06-28 06:54:20,370 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-06-28 06:54:20,370 - app.scheduler.jobs - INFO - Registered job: moving_averages_job (runs daily at 10:00 AM ET, weekdays only)
+2025-06-28 06:54:20,370 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-06-28 06:54:20,370 - app.scheduler.jobs - INFO - Registered job: xag_price_job (runs daily at 3:30 PM ET, weekdays only)
+2025-06-28 06:54:20,370 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-06-28 06:54:20,371 - app.scheduler.jobs - INFO - Registered job: btc_price_job (runs every hour on the hour, weekdays only)
+2025-06-28 06:54:20,371 - apscheduler.scheduler - INFO - Added job "Update Overamt Values" to job store "default"
+2025-06-28 06:54:20,371 - apscheduler.scheduler - INFO - Added job "Update Stock Prices" to job store "default"
+2025-06-28 06:54:20,371 - apscheduler.scheduler - INFO - Added job "Update Moving Averages and Stats" to job store "default"
+2025-06-28 06:54:20,371 - apscheduler.scheduler - INFO - Added job "Update XAG (Silver) Price" to job store "default"
+2025-06-28 06:54:20,372 - apscheduler.scheduler - INFO - Added job "Update BTC-USD Price and Moving Averages (BTC)" to job store "default"
+2025-06-28 06:54:20,372 - apscheduler.scheduler - INFO - Scheduler started
+2025-06-28 06:54:20,372 - apscheduler - INFO - Task scheduler started
+2025-06-28 06:54:20,372 - app.main - INFO - Application startup complete
+INFO:     Application startup complete.
+2025-06-28 06:56:17,618 - app.scheduler.process_manager - INFO - Received signal 15, initiating shutdown
+INFO:     Stopping reloader process [343]
+/usr/lib/python3.10/multiprocessing/resource_tracker.py:224: UserWarning: resource_tracker: There appear to be 5 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

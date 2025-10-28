@@ -1,0 +1,44 @@
+INFO:     Will watch for changes in these directories: ['/var/www/mpmv2/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [4767] using StatReload
+INFO:     Started server process [4795]
+INFO:     Waiting for application startup.
+2025-05-06 23:22:16,857 - app.main - INFO - Starting application
+2025-05-06 23:22:16,859 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-05-06 23:22:16,859 - app.scheduler.jobs - INFO - Registered job: update_overamt (runs every 5 minutes during market hours 9:00-16:00 ET, weekdays only)
+2025-05-06 23:22:16,859 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-05-06 23:22:16,859 - app.scheduler.jobs - INFO - Registered job: price_updater (runs daily at 9:35 AM ET, weekdays only)
+2025-05-06 23:22:16,859 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-05-06 23:22:16,859 - app.scheduler.jobs - INFO - Registered job: moving_averages_job (runs daily at 10:00 AM ET, weekdays only)
+2025-05-06 23:22:16,859 - apscheduler - INFO - Job price_updater_job paused based on saved state
+2025-05-06 23:22:16,859 - apscheduler - INFO - Job moving_averages_job paused based on saved state
+2025-05-06 23:22:16,860 - apscheduler.scheduler - INFO - Added job "Update Overamt Values" to job store "default"
+2025-05-06 23:22:16,860 - apscheduler.scheduler - INFO - Added job "Update Stock Prices" to job store "default"
+2025-05-06 23:22:16,860 - apscheduler.scheduler - INFO - Added job "Update Moving Averages and Stats" to job store "default"
+2025-05-06 23:22:16,860 - apscheduler.scheduler - INFO - Scheduler started
+2025-05-06 23:22:16,860 - apscheduler - INFO - Task scheduler started
+2025-05-06 23:22:16,860 - app.main - INFO - Application startup complete
+INFO:     Application startup complete.
+INFO:     None:0 - "GET /api/mpt HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/mpt HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/holdings HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/holdings HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/mpt HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/holdings HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/mpt HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/holdings HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/mpt HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/holdings HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/holdings HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/holdings HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR/transactions HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR/transactions HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR/returns HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR/returns HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /logos/CARR.png HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR/transactions HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR/transactions HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR/price-history HTTP/1.1" 200 OK
+INFO:     None:0 - "GET /api/positions/CARR/price-history HTTP/1.1" 200 OK

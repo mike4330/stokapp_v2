@@ -14,6 +14,7 @@ import PositionInfo from './pages/PositionInfo';
 import SectorAllocationChart from './components/SectorAllocationChart';
 import MPTModelling from './pages/MPTModelling';
 import ResultsExplorer from './pages/ResultsExplorer';
+import ModelPerformance from './pages/ModelPerformance';
 import SchedulerSettings from './pages/SchedulerSettings';
 import PortfolioPerformancePage from './pages/PortfolioPerformancePage';
 import PortfolioVisualization from './pages/PortfolioVisualization';
@@ -70,6 +71,7 @@ function App() {
             <Route path="/positions/:symbol" element={<PositionInfo />} />
             <Route path="/modelling/mpt" element={<MPTModelling />} />
             <Route path="/modelling/results-explorer" element={<ResultsExplorer />} />
+            <Route path="/modelling/performance" element={<ModelPerformance />} />
             <Route path="/portfolio-balance" element={<PortfolioBalance />} />
             <Route path="/lot-manager" element={<LotManagerPage />} />
             <Route path="/charts/portfolio" element={<PortfolioPerformancePage />} />

@@ -50,19 +50,7 @@ A modern web application for managing investment portfolios, tracking transactio
 - Backend API: RESTful service (included in this repository)
 - Scheduler: APScheduler (Python)
 
-## Scheduler Functionality
-
-The application includes a background task scheduler (using APScheduler) that automates key portfolio management tasks. Example scheduled jobs:
-
-- **update_overamt**: Runs every 5 minutes during US market hours (9:00 AM - 4:00 PM ET, weekdays only) to update portfolio metrics.
-- **price_updater**: Runs daily at 9:35 AM ET on weekdays to update stock prices.
-
-You can check the scheduler status and view registered jobs by visiting:
-```
-http://localhost:8000/scheduler/status
-```
-
-Scheduler activity is also logged in the backend logs.
+For detailed technical implementation information, see [INTERNALS.md](docs/INTERNALS.md).
 
 ## Getting Started
 

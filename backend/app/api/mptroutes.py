@@ -189,4 +189,49 @@ def check_task_status(task_id: str):
         status_data = get_task_status(task_id)
         return status_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to check task status: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to check task status: {str(e)}")
+
+@router.get("/mpt-results/time-series")
+def get_mpt_results_time_series(days: int = 365, db: Session = Depends(get_db)):
+    """
+    Get time series of MPT results (expected return, volatility, sharpe ratio) over time.
+
+    Args:
+        days: Number of days to look back (default 365)
+
+    Returns:
+        List of results with timestamp and metrics
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        # Calculate cutoff date
+        cutoff_date = datetime.now() - timedelta(days=days)
+        cutoff_str = cutoff_date.strftime('%Y-%m-%d %H:%M:%S')
+
+        query = text("""
+            SELECT
+                timestamp,
+                expected_return,
+                volatility,
+                sharpe_ratio
+            FROM mpt_results
+            WHERE timestamp >= :cutoff_date
+            ORDER BY timestamp ASC
+        """)
+
+        result = db.execute(query, {"cutoff_date": cutoff_str})
+
+        data = [
+            {
+                "timestamp": row[0],
+                "expected_return": float(row[1]) if row[1] is not None else None,
+                "volatility": float(row[2]) if row[2] is not None else None,
+                "sharpe_ratio": float(row[3]) if row[3] is not None else None,
+            }
+            for row in result
+        ]
+
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT results time series: {str(e)}") 

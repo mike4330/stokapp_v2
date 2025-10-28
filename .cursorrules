@@ -1,0 +1,29 @@
+# Cursor AI Assistant Rules for MPMv2 Project
+
+## Backend Testing
+
+If you need to test the backend separately from the main application:
+
+### Starting Backend for Testing
+```bash
+cd /var/www/mpmv2/backend
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+### Notes
+- Main application runs on port 8000
+- Use port 8001 for testing to avoid conflicts
+- The backend directory contains the FastAPI application
+- Hot reload is enabled for development
+
+## Project Structure
+- `/backend/` - FastAPI backend application
+- `/frontend/` - React frontend application
+- Production servers run on port 8000 (backend) and are served via nginx 
+
+# Frontend Components Date Handling Rule
+[frontend/src/components/]
+- Always handle date-only strings (e.g., YYYY-MM-DD) by parsing them as local dates using:
+    const [year, month, day] = dateString.split('-').map(Number);
+    new Date(year, month - 1, day);
+- Do NOT use new Date(dateString) directly for date-only strings, as this can cause timezone-related off-by-one errors. 
