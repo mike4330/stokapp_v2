@@ -6,7 +6,8 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import Plot from 'react-plotly.js';
 import TimeFrameSelector, { TimeFrame } from '../components/TimeFrameSelector';
 
 interface MPTResultData {
@@ -14,6 +15,12 @@ interface MPTResultData {
   expected_return: number | null;
   volatility: number | null;
   sharpe_ratio: number | null;
+}
+
+interface MPTScatterData {
+  expected_return: number;
+  lower_bound: number;
+  timestamp: string;
 }
 
 interface PerformanceData {
@@ -26,11 +33,12 @@ const ModelPerformance: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PerformanceData | null>(null);
   const [timeSeriesData, setTimeSeriesData] = useState<MPTResultData[]>([]);
+  const [scatterData, setScatterData] = useState<MPTScatterData[]>([]);
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('1Y');
 
-  // Fetch MPT results time series
+  // Fetch MPT results data
   useEffect(() => {
-    const fetchTimeSeriesData = async () => {
+    const fetchData = async () => {
       setLoading(true);
       setError(null);
 
@@ -58,13 +66,24 @@ const ModelPerformance: React.FC = () => {
             break;
         }
 
-        const response = await fetch(`/api/mpt-results/time-series?days=${days}`);
-        if (!response.ok) {
+        // Fetch both time series and scatter data in parallel
+        const [timeSeriesResponse, scatterResponse] = await Promise.all([
+          fetch(`/api/mpt-results/time-series?days=${days}`),
+          fetch(`/api/mpt-results/scatter?days=${days}`)
+        ]);
+
+        if (!timeSeriesResponse.ok) {
           throw new Error('Failed to fetch MPT results time series');
         }
+        if (!scatterResponse.ok) {
+          throw new Error('Failed to fetch MPT results scatter data');
+        }
 
-        const data = await response.json();
-        setTimeSeriesData(data);
+        const timeSeriesData = await timeSeriesResponse.json();
+        const scatterData = await scatterResponse.json();
+
+        setTimeSeriesData(timeSeriesData);
+        setScatterData(scatterData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load model performance data');
       } finally {
@@ -72,7 +91,7 @@ const ModelPerformance: React.FC = () => {
       }
     };
 
-    fetchTimeSeriesData();
+    fetchData();
   }, [timeFrame]);
 
   return (
@@ -100,10 +119,10 @@ const ModelPerformance: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Chart 1 - Expected Return Over Time */}
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    Expected Return Over Time
-                  </h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  Expected Return Over Time
+                </h3>
+                <div className="mb-4">
                   <TimeFrameSelector
                     timeFrame={timeFrame}
                     onTimeFrameChange={setTimeFrame}
@@ -156,13 +175,73 @@ const ModelPerformance: React.FC = () => {
                 </div>
               </div>
 
-              {/* Chart 2 - Top Right */}
+              {/* Chart 2 - Expected Return vs Lower Bound Contour */}
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Chart 2
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  Expected Return vs Lower Bound (Contour)
                 </h3>
-                <div className="h-80 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                  Placeholder for scatter chart
+                <div className="mb-4">
+                  <TimeFrameSelector
+                    timeFrame={timeFrame}
+                    onTimeFrameChange={setTimeFrame}
+                  />
+                </div>
+                <div className="h-80">
+                  {scatterData.length > 0 ? (
+                    <Plot
+                      data={[
+                        {
+                          type: 'histogram2dcontour',
+                          x: scatterData.map(d => d.lower_bound * 100),
+                          y: scatterData.map(d => d.expected_return * 100),
+                          colorscale: [
+                            [0, 'rgba(5, 150, 105, 0)'],
+                            [0.1, 'rgba(5, 150, 105, 0.05)'],
+                            [0.2, 'rgba(20, 83, 45, 0.2)'],
+                            [0.3, 'rgba(21, 128, 61, 0.3)'],
+                            [0.4, 'rgba(22, 163, 74, 0.4)'],
+                            [0.5, 'rgba(34, 197, 94, 0.5)'],
+                            [0.6, 'rgba(74, 222, 128, 0.6)'],
+                            [0.7, 'rgba(134, 239, 172, 0.75)'],
+                            [0.85, 'rgba(187, 247, 208, 0.85)'],
+                            [1, 'rgba(220, 252, 231, 0.95)']
+                          ],
+                          reversescale: false,
+                          showscale: false,
+                          contours: {
+                            coloring: 'fill',
+                            showlabels: true,
+                          },
+                        }
+                      ]}
+                      layout={{
+                        autosize: true,
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        xaxis: {
+                          title: 'Lower Bound (%)',
+                          gridcolor: '#374151',
+                          tickformat: '.4f',
+                        },
+                        yaxis: {
+                          title: 'Expected Return (%)',
+                          gridcolor: '#374151',
+                          tickformat: '.2f',
+                        },
+                        margin: { t: 20, r: 20, b: 50, l: 60 },
+                        hovermode: 'closest',
+                      }}
+                      config={{
+                        displayModeBar: false,
+                        responsive: true,
+                      }}
+                      style={{ width: '100%', height: '100%' }}
+                    />
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+                      No data available
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -172,7 +251,7 @@ const ModelPerformance: React.FC = () => {
                   Chart 3
                 </h3>
                 <div className="h-80 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                  Placeholder for scatter chart
+                  Placeholder
                 </div>
               </div>
 
