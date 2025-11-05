@@ -23,17 +23,31 @@ interface MPTScatterData {
   timestamp: string;
 }
 
+interface MPTGammaScatterData {
+  gamma: number;
+  expected_return: number;
+  timestamp: string;
+}
+
 interface PerformanceData {
   // Define your performance data structure here
   // This will depend on what backend API you create
 }
 
 const ModelPerformance: React.FC = () => {
+  // Grid Layout Configuration
+  // Each row defines: cols (number of columns) and cards (array of card identifiers)
+  const gridLayout = [
+    { cols: 2, cards: ['expected-return-time', 'expected-return-lower-bound-contour'] },
+    { cols: 2, cards: ['gamma-expected-return-contour', 'chart4'] },
+  ];
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PerformanceData | null>(null);
   const [timeSeriesData, setTimeSeriesData] = useState<MPTResultData[]>([]);
   const [scatterData, setScatterData] = useState<MPTScatterData[]>([]);
+  const [gammaScatterData, setGammaScatterData] = useState<MPTGammaScatterData[]>([]);
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('1Y');
 
   // Fetch MPT results data
@@ -66,10 +80,11 @@ const ModelPerformance: React.FC = () => {
             break;
         }
 
-        // Fetch both time series and scatter data in parallel
-        const [timeSeriesResponse, scatterResponse] = await Promise.all([
+        // Fetch time series and scatter data in parallel
+        const [timeSeriesResponse, scatterResponse, gammaScatterResponse] = await Promise.all([
           fetch(`/api/mpt-results/time-series?days=${days}`),
-          fetch(`/api/mpt-results/scatter?days=${days}`)
+          fetch(`/api/mpt-results/scatter?days=${days}`),
+          fetch(`/api/mpt-results/gamma-scatter?days=${days}`)
         ]);
 
         if (!timeSeriesResponse.ok) {
@@ -78,12 +93,17 @@ const ModelPerformance: React.FC = () => {
         if (!scatterResponse.ok) {
           throw new Error('Failed to fetch MPT results scatter data');
         }
+        if (!gammaScatterResponse.ok) {
+          throw new Error('Failed to fetch MPT results gamma scatter data');
+        }
 
         const timeSeriesData = await timeSeriesResponse.json();
         const scatterData = await scatterResponse.json();
+        const gammaScatterData = await gammaScatterResponse.json();
 
         setTimeSeriesData(timeSeriesData);
         setScatterData(scatterData);
+        setGammaScatterData(gammaScatterData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load model performance data');
       } finally {
@@ -94,8 +114,232 @@ const ModelPerformance: React.FC = () => {
     fetchData();
   }, [timeFrame]);
 
+  // Render individual card based on cardId
+  const renderCard = (cardId: string) => {
+    switch (cardId) {
+      case 'expected-return-time':
+        return (
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              Expected Return Over Time
+            </h3>
+            <div className="mb-4">
+              <TimeFrameSelector
+                timeFrame={timeFrame}
+                onTimeFrameChange={setTimeFrame}
+              />
+            </div>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={timeSeriesData}
+                  margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis
+                    dataKey="timestamp"
+                    tickFormatter={(timestamp) => {
+                      const date = new Date(timestamp);
+                      return date.toLocaleDateString();
+                    }}
+                    stroke="#9CA3AF"
+                    tick={{ fontSize: 11 }}
+                  />
+                  <YAxis
+                    domain={['auto', 'auto']}
+                    tickFormatter={(value) => `${(value * 100).toFixed(1)}%`}
+                    stroke="#9CA3AF"
+                    tick={{ fontSize: 11 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                      border: '1px solid #374151',
+                      borderRadius: '0.375rem',
+                    }}
+                    labelStyle={{ color: '#F3F4F6' }}
+                    formatter={(value: number) => [`${(value * 100).toFixed(2)}%`, 'Expected Return']}
+                    labelFormatter={(timestamp) => {
+                      const date = new Date(timestamp);
+                      return date.toLocaleString();
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="expected_return"
+                    stroke="#059669"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+
+      case 'expected-return-lower-bound-contour':
+        return (
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              Expected Return vs Lower Bound (Contour)
+            </h3>
+            <div className="mb-4">
+              <TimeFrameSelector
+                timeFrame={timeFrame}
+                onTimeFrameChange={setTimeFrame}
+              />
+            </div>
+            <div className="h-80">
+              {scatterData.length > 0 ? (
+                <Plot
+                  data={[
+                    {
+                      type: 'histogram2dcontour',
+                      x: scatterData.map(d => d.lower_bound * 100),
+                      y: scatterData.map(d => d.expected_return * 100),
+                      colorscale: [
+                        [0, 'rgba(5, 150, 105, 0)'],
+                        [0.1, 'rgba(5, 150, 105, 0.05)'],
+                        [0.2, 'rgba(20, 83, 45, 0.2)'],
+                        [0.3, 'rgba(21, 128, 61, 0.3)'],
+                        [0.4, 'rgba(22, 163, 74, 0.4)'],
+                        [0.5, 'rgba(34, 197, 94, 0.5)'],
+                        [0.6, 'rgba(74, 222, 128, 0.6)'],
+                        [0.7, 'rgba(134, 239, 172, 0.75)'],
+                        [0.85, 'rgba(187, 247, 208, 0.85)'],
+                        [1, 'rgba(220, 252, 231, 0.95)']
+                      ],
+                      reversescale: false,
+                      showscale: false,
+                      contours: {
+                        coloring: 'fill',
+                        showlabels: true,
+                      },
+                    }
+                  ]}
+                  layout={{
+                    autosize: true,
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    xaxis: {
+                      title: 'Lower Bound (%)',
+                      gridcolor: '#374151',
+                      tickformat: '.4f',
+                    },
+                    yaxis: {
+                      title: 'Expected Return (%)',
+                      gridcolor: '#374151',
+                      tickformat: '.2f',
+                    },
+                    margin: { t: 20, r: 20, b: 50, l: 60 },
+                    hovermode: 'closest',
+                  }}
+                  config={{
+                    displayModeBar: false,
+                    responsive: true,
+                  }}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+                  No data available
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'gamma-expected-return-contour':
+        return (
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              Gamma vs Expected Return (Contour)
+            </h3>
+            <div className="mb-4">
+              <TimeFrameSelector
+                timeFrame={timeFrame}
+                onTimeFrameChange={setTimeFrame}
+              />
+            </div>
+            <div className="h-80">
+              {gammaScatterData.length > 0 ? (
+                <Plot
+                  data={[
+                    {
+                      type: 'histogram2dcontour',
+                      x: gammaScatterData.map(d => d.gamma),
+                      y: gammaScatterData.map(d => d.expected_return * 100),
+                      colorscale: [
+                        [0, 'rgba(5, 150, 105, 0)'],
+                        [0.1, 'rgba(5, 150, 105, 0.05)'],
+                        [0.2, 'rgba(20, 83, 45, 0.2)'],
+                        [0.3, 'rgba(21, 128, 61, 0.3)'],
+                        [0.4, 'rgba(22, 163, 74, 0.4)'],
+                        [0.5, 'rgba(34, 197, 94, 0.5)'],
+                        [0.6, 'rgba(74, 222, 128, 0.6)'],
+                        [0.7, 'rgba(134, 239, 172, 0.75)'],
+                        [0.85, 'rgba(187, 247, 208, 0.85)'],
+                        [1, 'rgba(220, 252, 231, 0.95)']
+                      ],
+                      reversescale: false,
+                      showscale: false,
+                      contours: {
+                        coloring: 'fill',
+                        showlabels: true,
+                      },
+                    }
+                  ]}
+                  layout={{
+                    autosize: true,
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    xaxis: {
+                      title: 'Gamma',
+                      gridcolor: '#374151',
+                      tickformat: '.2f',
+                    },
+                    yaxis: {
+                      title: 'Expected Return (%)',
+                      gridcolor: '#374151',
+                      tickformat: '.2f',
+                    },
+                    margin: { t: 20, r: 20, b: 50, l: 60 },
+                    hovermode: 'closest',
+                  }}
+                  config={{
+                    displayModeBar: false,
+                    responsive: true,
+                  }}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+                  No data available
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'chart4':
+        return (
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Chart 4
+            </h3>
+            <div className="h-80 flex items-center justify-center text-gray-500 dark:text-gray-400">
+              Placeholder
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-3 py-6">
       <Helmet>
         <title>Model Performance | MPM</title>
       </Helmet>
@@ -116,154 +360,17 @@ const ModelPerformance: React.FC = () => {
             </div>
           )}
           {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Chart 1 - Expected Return Over Time */}
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  Expected Return Over Time
-                </h3>
-                <div className="mb-4">
-                  <TimeFrameSelector
-                    timeFrame={timeFrame}
-                    onTimeFrameChange={setTimeFrame}
-                  />
+            <div className="space-y-3">
+              {gridLayout.map((row, rowIndex) => (
+                <div
+                  key={rowIndex}
+                  className={`grid grid-cols-1 md:grid-cols-${row.cols} gap-3`}
+                >
+                  {row.cards.map((cardId) => (
+                    <div key={cardId}>{renderCard(cardId)}</div>
+                  ))}
                 </div>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={timeSeriesData}
-                      margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="timestamp"
-                        tickFormatter={(timestamp) => {
-                          const date = new Date(timestamp);
-                          return date.toLocaleDateString();
-                        }}
-                        stroke="#9CA3AF"
-                        tick={{ fontSize: 11 }}
-                      />
-                      <YAxis
-                        domain={['auto', 'auto']}
-                        tickFormatter={(value) => `${(value * 100).toFixed(1)}%`}
-                        stroke="#9CA3AF"
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                          border: '1px solid #374151',
-                          borderRadius: '0.375rem',
-                        }}
-                        labelStyle={{ color: '#F3F4F6' }}
-                        formatter={(value: number) => [`${(value * 100).toFixed(2)}%`, 'Expected Return']}
-                        labelFormatter={(timestamp) => {
-                          const date = new Date(timestamp);
-                          return date.toLocaleString();
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="expected_return"
-                        stroke="#059669"
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Chart 2 - Expected Return vs Lower Bound Contour */}
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  Expected Return vs Lower Bound (Contour)
-                </h3>
-                <div className="mb-4">
-                  <TimeFrameSelector
-                    timeFrame={timeFrame}
-                    onTimeFrameChange={setTimeFrame}
-                  />
-                </div>
-                <div className="h-80">
-                  {scatterData.length > 0 ? (
-                    <Plot
-                      data={[
-                        {
-                          type: 'histogram2dcontour',
-                          x: scatterData.map(d => d.lower_bound * 100),
-                          y: scatterData.map(d => d.expected_return * 100),
-                          colorscale: [
-                            [0, 'rgba(5, 150, 105, 0)'],
-                            [0.1, 'rgba(5, 150, 105, 0.05)'],
-                            [0.2, 'rgba(20, 83, 45, 0.2)'],
-                            [0.3, 'rgba(21, 128, 61, 0.3)'],
-                            [0.4, 'rgba(22, 163, 74, 0.4)'],
-                            [0.5, 'rgba(34, 197, 94, 0.5)'],
-                            [0.6, 'rgba(74, 222, 128, 0.6)'],
-                            [0.7, 'rgba(134, 239, 172, 0.75)'],
-                            [0.85, 'rgba(187, 247, 208, 0.85)'],
-                            [1, 'rgba(220, 252, 231, 0.95)']
-                          ],
-                          reversescale: false,
-                          showscale: false,
-                          contours: {
-                            coloring: 'fill',
-                            showlabels: true,
-                          },
-                        }
-                      ]}
-                      layout={{
-                        autosize: true,
-                        paper_bgcolor: 'rgba(0,0,0,0)',
-                        plot_bgcolor: 'rgba(0,0,0,0)',
-                        xaxis: {
-                          title: 'Lower Bound (%)',
-                          gridcolor: '#374151',
-                          tickformat: '.4f',
-                        },
-                        yaxis: {
-                          title: 'Expected Return (%)',
-                          gridcolor: '#374151',
-                          tickformat: '.2f',
-                        },
-                        margin: { t: 20, r: 20, b: 50, l: 60 },
-                        hovermode: 'closest',
-                      }}
-                      config={{
-                        displayModeBar: false,
-                        responsive: true,
-                      }}
-                      style={{ width: '100%', height: '100%' }}
-                    />
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-                      No data available
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Chart 3 - Bottom Left */}
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Chart 3
-                </h3>
-                <div className="h-80 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                  Placeholder
-                </div>
-              </div>
-
-              {/* Chart 4 - Bottom Right */}
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Chart 4
-                </h3>
-                <div className="h-80 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                  Placeholder for scatter chart
-                </div>
-              </div>
+              ))}
             </div>
           )}
         </div>

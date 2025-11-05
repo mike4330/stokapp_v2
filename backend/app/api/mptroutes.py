@@ -279,4 +279,49 @@ def get_mpt_results_scatter(days: int = 365, db: Session = Depends(get_db)):
 
         return data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT results scatter data: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT results scatter data: {str(e)}")
+
+@router.get("/mpt-results/gamma-scatter")
+def get_mpt_results_gamma_scatter(days: int = 365, db: Session = Depends(get_db)):
+    """
+    Get scatter plot data of expected_return vs gamma from MPT results.
+
+    Args:
+        days: Number of days to look back (default 365)
+
+    Returns:
+        List of results with expected_return and gamma
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        # Calculate cutoff date
+        cutoff_date = datetime.now() - timedelta(days=days)
+        cutoff_str = cutoff_date.strftime('%Y-%m-%d %H:%M:%S')
+
+        query = text("""
+            SELECT
+                gamma,
+                expected_return,
+                timestamp
+            FROM mpt_results
+            WHERE timestamp >= :cutoff_date
+            AND expected_return IS NOT NULL
+            AND gamma IS NOT NULL
+            ORDER BY timestamp ASC
+        """)
+
+        result = db.execute(query, {"cutoff_date": cutoff_str})
+
+        data = [
+            {
+                "gamma": float(row[0]),
+                "expected_return": float(row[1]),
+                "timestamp": row[2],
+            }
+            for row in result
+        ]
+
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT results gamma scatter data: {str(e)}")
