@@ -16,57 +16,54 @@ logger = logging.getLogger(__name__)
 def calculate_portfolio_value(db: Session) -> float:
     """
     Calculate the total portfolio value based on current positions.
+    Uses units_remaining to accurately reflect open positions.
     """
     portfolio_value = 0.0
-    
+
     try:
-        # Get all distinct symbols from transactions
-        symbol_query = text("SELECT DISTINCT symbol FROM transactions ORDER BY symbol")
+        # Get all distinct symbols from prices table (only symbols with prices)
+        symbol_query = text("SELECT DISTINCT symbol FROM prices ORDER BY symbol")
         symbols = db.execute(symbol_query).fetchall()
-        
+
         for symbol_row in symbols:
             symbol = symbol_row[0]
-            
-            # Calculate net units for the symbol
-            buy_units_query = text("""
-                SELECT SUM(units) AS buy_units 
-                FROM transactions 
-                WHERE xtype = 'Buy' AND symbol = :symbol
+
+            # Calculate net units using units_remaining for accurate position tracking
+            # This accounts for partial sells and disposed lots
+            units_query = text("""
+                SELECT SUM(CASE
+                    WHEN units_remaining IS NULL THEN units
+                    ELSE units_remaining
+                END) as net_units
+                FROM transactions
+                WHERE xtype = 'Buy'
+                AND symbol = :symbol
+                AND disposition IS NULL
             """)
-            buy_units_result = db.execute(buy_units_query, {"symbol": symbol}).fetchone()
-            buy_units = buy_units_result[0] or 0
-            
-            sell_units_query = text("""
-                SELECT SUM(units) AS sell_units 
-                FROM transactions 
-                WHERE xtype = 'Sell' AND symbol = :symbol
-            """)
-            sell_units_result = db.execute(sell_units_query, {"symbol": symbol}).fetchone()
-            sell_units = sell_units_result[0] or 0
-            
-            net_units = buy_units - sell_units
-            
+            units_result = db.execute(units_query, {"symbol": symbol}).fetchone()
+            net_units = units_result[0] if units_result and units_result[0] else 0
+
             # Skip if no position in this symbol
             if net_units <= 0:
                 continue
-            
+
             # Get current price for the symbol
             price_query = text("SELECT price FROM prices WHERE symbol = :symbol")
             price_result = db.execute(price_query, {"symbol": symbol}).fetchone()
-            
+
             if not price_result:
                 logger.warning(f"No price found for symbol {symbol}")
                 continue
-                
+
             current_price = price_result[0]
-            
+
             # Calculate position value and add to total
             position_value = net_units * current_price
             portfolio_value += position_value
-            
+
         logger.info(f"Calculated portfolio value: ${portfolio_value:.2f}")
         return portfolio_value
-        
+
     except Exception as e:
         logger.error(f"Error calculating portfolio value: {str(e)}")
         return 0.0
@@ -74,41 +71,38 @@ def calculate_portfolio_value(db: Session) -> float:
 def get_position_value(db: Session, symbol: str) -> float:
     """
     Calculate the current value of a position for a given symbol.
+    Uses units_remaining to accurately reflect open positions.
     """
     try:
-        # Calculate net units for the symbol
-        buy_units_query = text("""
-            SELECT SUM(units) AS buy_units 
-            FROM transactions 
-            WHERE xtype = 'Buy' AND symbol = :symbol
+        # Calculate net units using units_remaining for accurate position tracking
+        # This accounts for partial sells and disposed lots
+        units_query = text("""
+            SELECT SUM(CASE
+                WHEN units_remaining IS NULL THEN units
+                ELSE units_remaining
+            END) as net_units
+            FROM transactions
+            WHERE xtype = 'Buy'
+            AND symbol = :symbol
+            AND disposition IS NULL
         """)
-        buy_units_result = db.execute(buy_units_query, {"symbol": symbol}).fetchone()
-        buy_units = buy_units_result[0] or 0
-        
-        sell_units_query = text("""
-            SELECT SUM(units) AS sell_units 
-            FROM transactions 
-            WHERE xtype = 'Sell' AND symbol = :symbol
-        """)
-        sell_units_result = db.execute(sell_units_query, {"symbol": symbol}).fetchone()
-        sell_units = sell_units_result[0] or 0
-        
-        net_units = buy_units - sell_units
-        
+        units_result = db.execute(units_query, {"symbol": symbol}).fetchone()
+        net_units = units_result[0] if units_result and units_result[0] else 0
+
         # Get current price for the symbol
         price_query = text("SELECT price FROM prices WHERE symbol = :symbol")
         price_result = db.execute(price_query, {"symbol": symbol}).fetchone()
-        
+
         if not price_result:
             logger.warning(f"No price found for symbol {symbol}")
             return 0.0
-            
+
         current_price = price_result[0]
-        
+
         # Calculate position value
         position_value = net_units * current_price
         return position_value
-        
+
     except Exception as e:
         logger.error(f"Error calculating position value for {symbol}: {str(e)}")
         return 0.0
