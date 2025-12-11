@@ -40,9 +40,9 @@ interface SectorAllocationResponse {
 
 interface FilterOptions {
   bonds: boolean;
-  misc: boolean;
   preciousMetals: boolean;
   commodities: boolean;
+  currency: boolean;
 }
 
 // Sector name normalization mapping
@@ -73,11 +73,12 @@ const SectorAllocationChart: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
+  const [zeroBasedYAxis, setZeroBasedYAxis] = useState(true);
   const [filters, setFilters] = useState<FilterOptions>({
     bonds: true,
-    misc: true,
     preciousMetals: true,
-    commodities: true
+    commodities: true,
+    currency: true
   });
 
   useEffect(() => {
@@ -123,23 +124,23 @@ const SectorAllocationChart: React.FC = () => {
 
   useEffect(() => {
     let newFilteredData = [...data];
-    
+
     if (!filters.bonds) {
       newFilteredData = newFilteredData.filter(item => item.sector.toLowerCase() !== 'bonds');
     }
-    
-    if (!filters.misc) {
-      newFilteredData = newFilteredData.filter(item => item.sector.toLowerCase() !== 'misc');
-    }
-    
+
     if (!filters.preciousMetals) {
       newFilteredData = newFilteredData.filter(item => item.sector.toLowerCase() !== 'precious metals');
     }
-    
+
     if (!filters.commodities) {
       newFilteredData = newFilteredData.filter(item => item.sector.toLowerCase() !== 'commodities');
     }
-    
+
+    if (!filters.currency) {
+      newFilteredData = newFilteredData.filter(item => item.sector.toLowerCase() !== 'currency');
+    }
+
     setFilteredData(newFilteredData);
   }, [filters, data]);
 
@@ -207,7 +208,7 @@ const SectorAllocationChart: React.FC = () => {
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
             Sector Allocation
           </h2>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4 mb-3">
             <label className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 cursor-pointer">
               <input
                 type="checkbox"
@@ -216,15 +217,6 @@ const SectorAllocationChart: React.FC = () => {
                 className="form-checkbox h-4 w-4 text-blue-600 dark:text-blue-500 rounded border-gray-300 dark:border-gray-600 focus:ring-blue-500"
               />
               <span>Show Bonds</span>
-            </label>
-            <label className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filters.misc}
-                onChange={() => handleFilterChange('misc')}
-                className="form-checkbox h-4 w-4 text-blue-600 dark:text-blue-500 rounded border-gray-300 dark:border-gray-600 focus:ring-blue-500"
-              />
-              <span>Show Misc</span>
             </label>
             <label className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 cursor-pointer">
               <input
@@ -243,6 +235,26 @@ const SectorAllocationChart: React.FC = () => {
                 className="form-checkbox h-4 w-4 text-blue-600 dark:text-blue-500 rounded border-gray-300 dark:border-gray-600 focus:ring-blue-500"
               />
               <span>Show Commodities</span>
+            </label>
+            <label className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filters.currency}
+                onChange={() => handleFilterChange('currency')}
+                className="form-checkbox h-4 w-4 text-blue-600 dark:text-blue-500 rounded border-gray-300 dark:border-gray-600 focus:ring-blue-500"
+              />
+              <span>Show Currency</span>
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={zeroBasedYAxis}
+                onChange={() => setZeroBasedYAxis(!zeroBasedYAxis)}
+                className="form-checkbox h-4 w-4 text-blue-600 dark:text-blue-500 rounded border-gray-300 dark:border-gray-600 focus:ring-blue-500"
+              />
+              <span>Zero-Based Y Axis</span>
             </label>
           </div>
         </div>
@@ -276,10 +288,11 @@ const SectorAllocationChart: React.FC = () => {
               axisLine={{ stroke: '#374151', strokeWidth: 1 }}  // dark:border-gray-700
             />
             <YAxis
+              domain={zeroBasedYAxis ? [0, 'auto'] : ['auto', 'auto']}
               tickFormatter={(value) => `${value.toFixed(1)}%`}
-              tickCount={13} 
+              tickCount={13}
               //interval={0}
-              tick={{ 
+              tick={{
                 fontSize: 11,
                 fill: '#9CA3AF'  // text-gray-400
               }}
