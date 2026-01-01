@@ -51,7 +51,11 @@ class DividendAnalysisService:
             except (ValueError, IndexError):
                 # Skip invalid dates
                 continue
-        
+
+        # Deduplicate payment dates (securities held in multiple accounts
+        # will have multiple transactions on the same date)
+        payment_dates = sorted(list(set(payment_dates)))
+
         # Calculate intervals between payments in days
         intervals = []
         for i in range(1, len(payment_dates)):
