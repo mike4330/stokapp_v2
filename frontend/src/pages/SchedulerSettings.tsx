@@ -394,12 +394,12 @@ const SchedulerSettings: React.FC = () => {
                     Next Run
                   </th>
                   <th scope="col" className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-20">
-                    Status
+                    Enabled
                   </th>
                   <th scope="col" className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-24">
                     Persisted
                   </th>
-                  <th scope="col" className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-24">
+                  <th scope="col" className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-20">
                     Actions
                   </th>
                 </tr>
@@ -430,13 +430,29 @@ const SchedulerSettings: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-sm text-center">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          job.enabled
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                            : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                        }`}>
-                          {job.enabled ? 'On' : 'Off'}
-                        </span>
+                        <button
+                          onClick={() => handleToggleJob(job.id, job.enabled)}
+                          disabled={actionLoading === job.id}
+                          title={job.enabled ? 'Disable job' : 'Enable job'}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                            actionLoading === job.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                          } ${job.enabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                          role="switch"
+                          aria-checked={job.enabled}
+                        >
+                          {actionLoading === job.id ? (
+                            <span className="inline-flex h-4 w-4 translate-x-3.5 items-center justify-center rounded-full bg-white shadow-md">
+                              <svg className="animate-spin h-3 w-3 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            </span>
+                          ) : (
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-200 ${
+                              job.enabled ? 'translate-x-6' : 'translate-x-1'
+                            }`} />
+                          )}
+                        </button>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-sm text-center">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -448,56 +464,31 @@ const SchedulerSettings: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-sm text-center">
-                        <div className="flex justify-end space-x-1">
+                        <div className="flex justify-center space-x-1">
                           <button
                             onClick={() => setEditingJob(job)}
-                            title="Edit Job"
-                            className="inline-flex items-center p-1.5 border border-transparent rounded-md shadow-sm text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                            title="Edit schedule"
+                            className="inline-flex items-center p-1.5 rounded-md text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
                           >
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
                           <button
-                            onClick={() => handleToggleJob(job.id, job.enabled)}
-                            disabled={actionLoading === job.id}
-                            title={job.enabled ? 'Disable Job' : 'Enable Job'}
-                            className={`inline-flex items-center p-1.5 border border-transparent rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                              job.enabled
-                                ? 'text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 focus:ring-red-500'
-                                : 'text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 focus:ring-green-500'
-                            } ${actionLoading === job.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          >
-                            {actionLoading === job.id ? (
-                              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                            ) : job.enabled ? (
-                              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            ) : (
-                              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m2-4a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            )}
-                          </button>
-                          <button
                             onClick={() => handleRunNow(job.id)}
                             disabled={actionLoading === `run-${job.id}` || !job.enabled}
-                            title="Run Now"
-                            className={`inline-flex items-center p-1.5 border border-transparent rounded-md shadow-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                              (actionLoading === `run-${job.id}` || !job.enabled) ? 'opacity-50 cursor-not-allowed' : ''
+                            title="Run now"
+                            className={`inline-flex items-center p-1.5 rounded-md text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                              (actionLoading === `run-${job.id}` || !job.enabled) ? 'opacity-30 cursor-not-allowed' : ''
                             }`}
                           >
                             {actionLoading === `run-${job.id}` ? (
-                              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                               </svg>
                             ) : (
-                              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
