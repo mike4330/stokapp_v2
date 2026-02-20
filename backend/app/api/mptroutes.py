@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Dict, Any
@@ -35,7 +35,12 @@ def get_symbols_with_allocation(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve symbols with allocation: {str(e)}")
 
 @router.get("/model-recommendations", response_model=List[ModelRecommendation])
-def get_model_recommendations(db: Session = Depends(get_db)):
+def get_model_recommendations(response: Response, db: Session = Depends(get_db)):
+    # Prevent caching of this endpoint
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
     try:
         logger = logging.getLogger(__name__)
         logger.info("Model recommendations API called")

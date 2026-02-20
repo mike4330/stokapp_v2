@@ -34,6 +34,11 @@ interface GroupedLots {
 interface FilterControls {
   lotBasis: number;
   returnPct: number;
+  accounts: {
+    FID: boolean;
+    FIDRI: boolean;
+    TT: boolean;
+  };
 }
 
 interface Recommendation {
@@ -49,10 +54,16 @@ const PortfolioBalance: React.FC = () => {
   const [groupedLots, setGroupedLots] = useState<GroupedLots>({});
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterControls>({
     lotBasis: 5,
     returnPct: 5,
+    accounts: {
+      FID: true,
+      FIDRI: true,
+      TT: true,
+    },
   });
 
   // Fetch data
@@ -76,10 +87,10 @@ const PortfolioBalance: React.FC = () => {
     fetchData();
   }, []);
 
-  // Refresh recommendations
+  // Refresh recommendations and lots
   const refreshAndUpdateOveramt = async () => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       setError(null);
       const jobResponse = await fetch('/scheduler/job/update_overamt_job/run-now', {
         method: 'POST'
@@ -87,21 +98,32 @@ const PortfolioBalance: React.FC = () => {
       if (!jobResponse.ok) {
         throw new Error('Failed to trigger update_overamt job');
       }
-      // After job completes, fetch recommendations
-      const response = await axios.get('/api/model-recommendations');
-      setRecommendations(response.data);
+      // After job completes, fetch both recommendations and lots
+      const [recommendationsResponse, lotsResponse] = await Promise.all([
+        axios.get('/api/model-recommendations'),
+        axios.get('/api/potential-lots')
+      ]);
+      setRecommendations(recommendationsResponse.data);
+      setLots(lotsResponse.data);
+      setFilteredLots(lotsResponse.data);
     } catch (err: any) {
       setError(err.message || 'Unknown error');
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   };
 
   // Apply filters and group by symbol
   useEffect(() => {
-    const filtered = lots.filter(lot => 
-      lot.current_value >= filters.lotBasis && 
-      lot.profit_pct >= filters.returnPct
+    // Get list of enabled accounts
+    const enabledAccounts = Object.entries(filters.accounts)
+      .filter(([_, enabled]) => enabled)
+      .map(([account, _]) => account);
+
+    const filtered = lots.filter(lot =>
+      lot.current_value >= filters.lotBasis &&
+      lot.profit_pct >= filters.returnPct &&
+      enabledAccounts.includes(lot.account)
     );
     setFilteredLots(filtered);
 
@@ -136,6 +158,16 @@ const PortfolioBalance: React.FC = () => {
     setFilters(prev => ({
       ...prev,
       returnPct: prev.returnPct + (increment ? 0.5 : -0.5)
+    }));
+  };
+
+  const toggleAccount = (account: 'FID' | 'FIDRI' | 'TT') => {
+    setFilters(prev => ({
+      ...prev,
+      accounts: {
+        ...prev.accounts,
+        [account]: !prev.accounts[account]
+      }
     }));
   };
 
@@ -199,12 +231,13 @@ const PortfolioBalance: React.FC = () => {
             </h2>
             <button
               onClick={refreshAndUpdateOveramt}
-              className="px-4 py-2 bg-green-800 hover:bg-blue-700 text-white rounded-md shadow-sm transition-colors duration-200 flex items-center"
+              disabled={refreshing}
+              className={`px-4 py-2 ${refreshing ? 'bg-gray-500 cursor-not-allowed' : 'bg-green-800 hover:bg-blue-700'} text-white rounded-md shadow-sm transition-colors duration-200 flex items-center`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 mr-2 ${refreshing ? 'animate-spin' : ''}`} viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
               </svg>
-              Refresh Data
+              {refreshing ? 'Refreshing...' : 'Refresh Data'}
             </button>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
@@ -306,6 +339,25 @@ const PortfolioBalance: React.FC = () => {
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v8m-4-4h8" /></svg>
                     </button>
                   </div>
+                </div>
+              </div>
+              {/* Account Filters */}
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Accounts
+                </label>
+                <div className="flex items-center space-x-4">
+                  {(['FID', 'FIDRI', 'TT'] as const).map(account => (
+                    <label key={account} className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.accounts[account]}
+                        onChange={() => toggleAccount(account)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{account}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>

@@ -19,6 +19,7 @@ import axios from 'axios';
 
 interface TransactionFormProps {
     onTransactionCreated?: () => void;
+    initialType?: 'Buy' | 'Sell' | 'Div';
 }
 
 interface FormData {
@@ -32,14 +33,14 @@ interface FormData {
 
 const ACCOUNTS = ['FID', 'FIDRI', 'TT'];
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated, initialType = 'Buy' }) => {
     const [symbols, setSymbols] = useState<string[]>([]);
     const [formData, setFormData] = useState<FormData>({
         date: new Date().toISOString().split('T')[0],
         account: 'FIDRI',
         symbol: '',
-        type: 'Buy',
-        units: '',
+        type: initialType,
+        units: initialType === 'Div' ? '1' : '',
         price: ''
     });
     const [error, setError] = useState<string | null>(null);
@@ -93,8 +94,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onTransactionCreated 
                 date: new Date().toISOString().split('T')[0],
                 account: 'FIDRI',
                 symbol: '',
-                type: 'Buy',
-                units: '',
+                type: initialType,
+                units: initialType === 'Div' ? '1' : '',
                 price: ''
             });
             

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List
@@ -70,12 +70,18 @@ def get_open_lots(db: Session = Depends(get_db)):
 
 @router.get("/potential-lots", response_model=List[PotentialLot])
 def get_potential_lots(
+    response: Response,
     profit_threshold: float = 0.6,
     lot_value_threshold: float = 1.0,
     overweight_threshold: float = 15,
     db: Session = Depends(get_db)
 ):
     """Get potential lots for sale based on profit and overweight criteria"""
+    # Prevent caching of this endpoint
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
     try:
         # Get overweight positions from MPT
         overweight_query = text("""

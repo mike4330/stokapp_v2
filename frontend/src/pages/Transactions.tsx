@@ -36,6 +36,7 @@ const Transactions: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [activeFormType, setActiveFormType] = useState<'Buy' | 'Sell' | 'Div'>('Buy');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
@@ -126,19 +127,44 @@ const Transactions: React.FC = () => {
             </p>
           </div>
           <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-            <button
-              type="button"
-              onClick={() => setShowForm(!showForm)}
-              className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto"
-            >
-              {showForm ? 'Hide Form' : 'Add Transaction'}
-            </button>
+            <div className="flex items-center gap-2">
+              {(['Buy', 'Sell', 'Div'] as const).map((type) => {
+                const isActive = showForm && activeFormType === type;
+                const colorMap = {
+                  Buy:  { base: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',  active: 'bg-green-800 ring-2 ring-green-400' },
+                  Sell: { base: 'bg-red-600   hover:bg-red-700   focus:ring-red-500',    active: 'bg-red-800   ring-2 ring-red-400'   },
+                  Div:  { base: 'bg-blue-600  hover:bg-blue-700  focus:ring-blue-500',   active: 'bg-blue-800  ring-2 ring-blue-400'  },
+                };
+                const { base, active } = colorMap[type];
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      if (isActive) {
+                        setShowForm(false);
+                      } else {
+                        setActiveFormType(type);
+                        setShowForm(true);
+                      }
+                    }}
+                    className={`inline-flex items-center justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${isActive ? active : base}`}
+                  >
+                    {type}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
         {showForm && (
           <div className="mt-6">
-            <TransactionForm onTransactionCreated={handleTransactionCreated} />
+            <TransactionForm
+              key={activeFormType}
+              initialType={activeFormType}
+              onTransactionCreated={handleTransactionCreated}
+            />
           </div>
         )}
         

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
+import math
 
 from app.db.session import get_db
 
@@ -15,6 +16,13 @@ class SectorReturn(BaseModel):
     sector: str
     return_percent: float
     return_dollars: float
+
+class PortfolioMetrics(BaseModel):
+    total_return_dollars: float
+    total_return_percent: float
+    ytd_return_percent: Optional[float]
+    annualized_return_percent: Optional[float]
+    volatility_1y: Optional[float]
 
 router = APIRouter()
 
@@ -244,4 +252,135 @@ def get_total_returns_by_sector(db: Session = Depends(get_db)):
         sector_returns.sort(key=lambda x: x["return_percent"], reverse=True)
         return sector_returns
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve total returns by sector: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve total returns by sector: {str(e)}")
+
+
+@router.get("/portfolio/metrics", response_model=PortfolioMetrics)
+def get_portfolio_metrics(db: Session = Depends(get_db)):
+    """
+    Compute portfolio-level performance metrics:
+    - Total Return $ and % (unrealized + realized + dividends)
+    - YTD Return % (portfolio value change since Jan 1 + YTD dividends)
+    - Annualized Return % (simple annualized total return from first purchase)
+    - Volatility 1Y (annualized std dev of daily returns from historical table)
+    """
+    try:
+        # --- Total Return: aggregate across all current holdings ---
+        holdings_query = text("""
+            SELECT
+                t.symbol,
+                SUM(CASE WHEN t.units_remaining IS NULL THEN t.units ELSE t.units_remaining END) AS net_units,
+                SUM(CASE WHEN t.units_remaining IS NULL THEN t.units * t.price ELSE t.units_remaining * t.price END) AS total_cost
+            FROM transactions t
+            WHERE t.xtype = 'Buy'
+            AND t.disposition IS NULL
+            GROUP BY t.symbol
+            HAVING net_units > 0
+        """)
+        holdings = db.execute(holdings_query).fetchall()
+
+        portfolio_cost = 0.0
+        portfolio_unrealized = 0.0
+
+        for symbol, net_units, total_cost in holdings:
+            price_row = db.execute(
+                text("SELECT price FROM prices WHERE symbol = :s"), {"s": symbol}
+            ).fetchone()
+            if not price_row or not total_cost:
+                continue
+            current_value = net_units * price_row[0]
+            portfolio_unrealized += current_value - total_cost
+            portfolio_cost += total_cost
+
+        # Realized gains from all Sell transactions
+        realized_row = db.execute(
+            text("SELECT COALESCE(SUM(gain), 0) FROM transactions WHERE xtype = 'Sell'")
+        ).fetchone()
+        portfolio_realized = realized_row[0] if realized_row else 0.0
+
+        # All dividends ever received
+        dividends_row = db.execute(
+            text("SELECT COALESCE(SUM(price), 0) FROM transactions WHERE xtype = 'Div'")
+        ).fetchone()
+        portfolio_dividends = dividends_row[0] if dividends_row else 0.0
+
+        total_return_dollars = portfolio_unrealized + portfolio_realized + portfolio_dividends
+        total_return_percent = (total_return_dollars / portfolio_cost * 100) if portfolio_cost > 0 else 0.0
+
+        # --- YTD Return: portfolio value change Jan 1 to now + YTD dividends ---
+        ytd_start_row = db.execute(text("""
+            SELECT value FROM historical
+            WHERE date >= date('now', 'start of year')
+            ORDER BY date ASC
+            LIMIT 1
+        """)).fetchone()
+
+        current_value_row = db.execute(text("""
+            SELECT value FROM historical
+            ORDER BY date DESC
+            LIMIT 1
+        """)).fetchone()
+
+        ytd_return_percent = None
+        if ytd_start_row and current_value_row and ytd_start_row[0] and ytd_start_row[0] > 0:
+            ytd_dividends_row = db.execute(text("""
+                SELECT COALESCE(SUM(price), 0) FROM transactions
+                WHERE xtype = 'Div'
+                AND date_new >= date('now', 'start of year')
+            """)).fetchone()
+            ytd_dividends = ytd_dividends_row[0] if ytd_dividends_row else 0.0
+            ytd_start_value = ytd_start_row[0]
+            current_port_value = current_value_row[0]
+            ytd_return_percent = ((current_port_value - ytd_start_value + ytd_dividends) / ytd_start_value) * 100
+
+        # --- Annualized Return: simple annualization of total return ---
+        annualized_return_percent = None
+        first_tx_row = db.execute(text("""
+            SELECT MIN(date_new) FROM transactions WHERE xtype = 'Buy'
+        """)).fetchone()
+        if first_tx_row and first_tx_row[0] and portfolio_cost > 0:
+            from datetime import date as date_type
+            import datetime
+            first_date_str = first_tx_row[0]
+            # Parse date string (SQLite returns ISO format)
+            if isinstance(first_date_str, str):
+                first_date = datetime.date.fromisoformat(first_date_str[:10])
+            else:
+                first_date = first_date_str
+            years_held = (datetime.date.today() - first_date).days / 365.25
+            if years_held > 0:
+                total_return_ratio = total_return_dollars / portfolio_cost
+                # Compound annualized: (1 + total_return_ratio)^(1/years) - 1
+                annualized_return_percent = ((1 + total_return_ratio) ** (1 / years_held) - 1) * 100
+
+        # --- Volatility 1Y: annualized std dev of daily % returns from portfolio value ---
+        volatility_1y = None
+        daily_values = db.execute(text("""
+            SELECT value FROM historical
+            WHERE date > date('now', '-366 days')
+            AND value IS NOT NULL AND value > 0
+            ORDER BY date
+        """)).fetchall()
+        if daily_values and len(daily_values) > 1:
+            values = [r[0] for r in daily_values]
+            # Compute day-over-day percentage returns
+            pct_returns = [
+                (values[i] - values[i - 1]) / values[i - 1] * 100
+                for i in range(1, len(values))
+                if values[i - 1] > 0
+            ]
+            if len(pct_returns) > 1:
+                mean = sum(pct_returns) / len(pct_returns)
+                variance = sum((v - mean) ** 2 for v in pct_returns) / (len(pct_returns) - 1)
+                daily_std = math.sqrt(variance)
+                volatility_1y = daily_std * math.sqrt(252)
+
+        return {
+            "total_return_dollars": total_return_dollars,
+            "total_return_percent": total_return_percent,
+            "ytd_return_percent": ytd_return_percent,
+            "annualized_return_percent": annualized_return_percent,
+            "volatility_1y": volatility_1y,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to compute portfolio metrics: {str(e)}")

@@ -47,6 +47,16 @@ const PortfolioPerformancePage: React.FC = () => {
   // State for sector chart display mode
   const [showSectorDollars, setShowSectorDollars] = useState(false);
 
+  // State for portfolio metrics (bottom cards)
+  const [metrics, setMetrics] = useState<{
+    total_return_dollars: number;
+    total_return_percent: number;
+    ytd_return_percent: number | null;
+    annualized_return_percent: number | null;
+    volatility_1y: number | null;
+  } | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
+
   // Fetch returns by security data on component mount
   useEffect(() => {
     const fetchReturnsData = async () => {
@@ -75,6 +85,21 @@ const PortfolioPerformancePage: React.FC = () => {
       }
     };
     fetchSectorReturnsData();
+  }, []);
+
+  // Fetch portfolio metrics for bottom cards
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const response = await axios.get('/api/portfolio/metrics');
+        setMetrics(response.data);
+      } catch (err) {
+        // leave metrics null on error
+      } finally {
+        setMetricsLoading(false);
+      }
+    };
+    fetchMetrics();
   }, []);
 
   // Sort data based on display mode
@@ -355,37 +380,62 @@ const PortfolioPerformancePage: React.FC = () => {
         )}
       </div>
       
-      {/* 
+      {/*
         BOTTOM SECTION: Performance Metrics
         Grid of key performance metrics in card format
       */}
       <div className="bg-gray-100 dark:bg-gray-800/90 rounded-xl shadow-lg p-4 border border-gray-200 dark:border-gray-700">
         <h2 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">Performance Metrics</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Annualized Return */}
-          <div className="bg-white dark:bg-gray-700 p-3 rounded-lg shadow">
-            <h3 className="text-xs text-gray-500 dark:text-gray-400 mb-1">Annualized Return</h3>
-            <p className="text-xl font-bold text-gray-900 dark:text-white">8.24%</p>
+        {metricsLoading ? (
+          <div className="flex items-center justify-center h-24">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
           </div>
-          
-          {/* YTD Return */}
-          <div className="bg-white dark:bg-gray-700 p-3 rounded-lg shadow">
-            <h3 className="text-xs text-gray-500 dark:text-gray-400 mb-1">YTD Return</h3>
-            <p className="text-xl font-bold text-gray-900 dark:text-white">5.62%</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Annualized Return */}
+            <div className="bg-white dark:bg-gray-700 p-3 rounded-lg shadow">
+              <h3 className="text-xs text-gray-500 dark:text-gray-400 mb-1">Annualized Return</h3>
+              <p className={`text-xl font-bold ${metrics && metrics.annualized_return_percent !== null && metrics.annualized_return_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {metrics && metrics.annualized_return_percent !== null
+                  ? `${metrics.annualized_return_percent.toFixed(2)}%`
+                  : '—'}
+              </p>
+            </div>
+
+            {/* YTD Return */}
+            <div className="bg-white dark:bg-gray-700 p-3 rounded-lg shadow">
+              <h3 className="text-xs text-gray-500 dark:text-gray-400 mb-1">YTD Return</h3>
+              <p className={`text-xl font-bold ${metrics && metrics.ytd_return_percent !== null && metrics.ytd_return_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {metrics && metrics.ytd_return_percent !== null
+                  ? `${metrics.ytd_return_percent.toFixed(2)}%`
+                  : '—'}
+              </p>
+            </div>
+
+            {/* Total Return */}
+            <div className="bg-white dark:bg-gray-700 p-3 rounded-lg shadow">
+              <h3 className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Return</h3>
+              <p className={`text-xl font-bold ${metrics && metrics.total_return_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {metrics ? `${metrics.total_return_percent.toFixed(2)}%` : '—'}
+              </p>
+              {metrics && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  ${metrics.total_return_dollars.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+            </div>
+
+            {/* Volatility */}
+            <div className="bg-white dark:bg-gray-700 p-3 rounded-lg shadow">
+              <h3 className="text-xs text-gray-500 dark:text-gray-400 mb-1">Volatility (1Y)</h3>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">
+                {metrics && metrics.volatility_1y !== null
+                  ? `${metrics.volatility_1y.toFixed(2)}%`
+                  : '—'}
+              </p>
+            </div>
           </div>
-          
-          {/* Total Return */}
-          <div className="bg-white dark:bg-gray-700 p-3 rounded-lg shadow">
-            <h3 className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Return</h3>
-            <p className="text-xl font-bold text-gray-900 dark:text-white">42.17%</p>
-          </div>
-          
-          {/* Volatility */}
-          <div className="bg-white dark:bg-gray-700 p-3 rounded-lg shadow">
-            <h3 className="text-xs text-gray-500 dark:text-gray-400 mb-1">Volatility (1Y)</h3>
-            <p className="text-xl font-bold text-gray-900 dark:text-white">12.8%</p>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

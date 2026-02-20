@@ -37,7 +37,8 @@ const DividendPredictions: React.FC = () => {
   const [summary, setSummary] = useState<DividendSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  // Define the max amount for color scaling - can be adjusted based on data
+  // Define the min/max amounts for color scaling - calculated from data
+  const [minColorAmount, setMinColorAmount] = useState<number>(1);
   const [maxColorAmount, setMaxColorAmount] = useState<number>(100);
 
   useEffect(() => {
@@ -48,13 +49,21 @@ const DividendPredictions: React.FC = () => {
         setPredictions(response.data.predictions);
         setSummary(response.data.summary);
         
-        // Calculate a reasonable max value for color scaling (95th percentile of all values)
+        // Calculate min/max values for color scaling based on actual data
         const allCosts = Object.values(response.data.predictions)
           .flatMap(pred => pred.last_three.map(entry => entry.cost))
           .filter(cost => cost > 0); // Filter out zeros
-          
+
         if (allCosts.length > 0) {
           allCosts.sort((a, b) => a - b);
+
+          // Use 5th percentile for min (to avoid outliers affecting scale)
+          const p5Index = Math.floor(allCosts.length * 0.05);
+          const p5Value = allCosts[p5Index];
+          // Round down to nearest 1 for cleaner scale
+          setMinColorAmount(Math.floor(p5Value));
+
+          // Use 95th percentile for max (to avoid outliers affecting scale)
           const p95Index = Math.floor(allCosts.length * 0.95);
           const p95Value = allCosts[p95Index];
           // Round up to nearest 5 for cleaner scale
@@ -138,14 +147,14 @@ const DividendPredictions: React.FC = () => {
             <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Dividend Amount Color Scale</h3>
             <div className="flex h-6 rounded-md overflow-hidden w-full">
               {Array.from({ length: 10 }).map((_, i) => {
-                const value = (i + 1) * (maxColorAmount / 10);
+                const value = minColorAmount + (i + 1) * ((maxColorAmount - minColorAmount) / 10);
                 return (
-                  <div 
-                    key={i} 
-                    className="flex-1" 
-                    style={getDividendStyle(value)}
+                  <div
+                    key={i}
+                    className="flex-1"
+                    style={getDividendStyle(value, minColorAmount, maxColorAmount)}
                   >
-                    {i === 0 && <span className="text-xs px-1">${1}</span>}
+                    {i === 0 && <span className="text-xs px-1">${minColorAmount.toFixed(0)}</span>}
                     {i === 9 && (
                       <span className="text-xs px-1 float-right">${maxColorAmount}+</span>
                     )}
@@ -172,14 +181,14 @@ const DividendPredictions: React.FC = () => {
                   </div>
                   <div className="divide-y divide-gray-200 dark:divide-gray-700">
                     {prediction.last_three.map((entry, index) => (
-                      <div 
-                        key={index} 
+                      <div
+                        key={index}
                         className="flex justify-between items-center p-1.5"
                       >
                         <span className="text-xs text-gray-600 dark:text-gray-400 mr-1">{entry.date}</span>
-                        <span 
+                        <span
                           className="text-xs font-medium px-1.5 py-0.5 rounded whitespace-nowrap"
-                          style={getDividendStyle(entry.cost)}
+                          style={getDividendStyle(entry.cost, minColorAmount, maxColorAmount)}
                         >
                           ${entry.cost.toFixed(2)}
                         </span>
@@ -206,14 +215,14 @@ const DividendPredictions: React.FC = () => {
                   </div>
                   <div className="divide-y divide-gray-200 dark:divide-gray-700">
                     {prediction.last_three.map((entry, index) => (
-                      <div 
-                        key={index} 
+                      <div
+                        key={index}
                         className="flex justify-between items-center p-1.5"
                       >
                         <span className="text-xs text-gray-600 dark:text-gray-400 mr-1">{entry.date}</span>
-                        <span 
+                        <span
                           className="text-xs font-medium px-1.5 py-0.5 rounded whitespace-nowrap"
-                          style={getDividendStyle(entry.cost)}
+                          style={getDividendStyle(entry.cost, minColorAmount, maxColorAmount)}
                         >
                           ${entry.cost.toFixed(2)}
                         </span>

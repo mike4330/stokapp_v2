@@ -13,9 +13,26 @@
  * length and P/L percentage, with real-time client-side sorting on all columns.
  */
 
-import React, { useState, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useMemo, useImperativeHandle, forwardRef, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useCombobox } from 'downshift';
+
+// Custom debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 // Viridis color palette (10 colors, from matplotlib)
 const viridisPalette = [
@@ -75,19 +92,24 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
   const [selectedLots, setSelectedLots] = useState<Set<number>>(new Set());
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
+  // Debounced filter values
+  const debouncedSelectedSymbol = useDebounce(selectedSymbol, 300);
+  const debouncedPlFilter = useDebounce(plFilter, 150);
+  const debouncedBasisFilter = useDebounce(basisFilter, 150);
+
   // Calculate min and max basis values from the data
   const { minBasis, maxBasis } = useMemo(() => {
     if (lots.length === 0) return { minBasis: 0, maxBasis: 10000 };
-    
+
     const validBasis = lots
       .map((lot: OpenLot) => lot.lot_basis)
       .filter((basis: number | null): basis is number => basis !== null);
-    
+
     if (validBasis.length === 0) return { minBasis: 0, maxBasis: 10000 };
-    
+
     const min = Math.floor(Math.min(...validBasis));
     const max = Math.ceil(Math.max(...validBasis));
-    
+
     return { minBasis: min, maxBasis: max };
   }, [lots]);
 
@@ -185,50 +207,66 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
     },
   });
 
-  const filteredLots = lots.filter(lot => {
-    // Symbol drilldown filter
-    if (symbolDrilldown && lot.symbol !== symbolDrilldown) return false;
-    // Symbol typeahead filter
-    if (selectedSymbol && lot.symbol !== selectedSymbol) return false;
-    // Term filter
-    if (termFilter !== 'all') {
-      const purchaseDate = new Date(lot.date_new);
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const isLongTerm = purchaseDate < oneYearAgo;
-      
-      if (termFilter === 'long' && !isLongTerm) return false;
-      if (termFilter === 'short' && isLongTerm) return false;
-    }
+  const filteredLots = useMemo(() => {
+    return lots.filter(lot => {
+      // Symbol drilldown filter
+      if (symbolDrilldown && lot.symbol !== symbolDrilldown) return false;
+      // Symbol typeahead filter - use debounced value
+      if (debouncedSelectedSymbol && lot.symbol !== debouncedSelectedSymbol) return false;
+      // Term filter
+      if (termFilter !== 'all') {
+        const purchaseDate = new Date(lot.date_new);
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        const isLongTerm = purchaseDate < oneYearAgo;
 
-    // P/L percentage filter
-    if (lot.pl_pct === null) return false;
-    if (lot.pl_pct < plFilter) return false;
+        if (termFilter === 'long' && !isLongTerm) return false;
+        if (termFilter === 'short' && isLongTerm) return false;
+      }
 
-    // Cost basis filter
-    if (lot.lot_basis === null) return false;
-    return lot.lot_basis >= basisFilter;
-  });
+      // P/L percentage filter - use debounced value
+      // IMPORTANT: Filters out lots where pl_pct is null to avoid comparison errors in the
+      // next line. This happens when a security has been removed from the prices table
+      // (typically after liquidation) but open lots remain due to data entry discrepancies.
+      //
+      // PITFALL: If you manually remove a security from the prices table BEFORE closing all
+      // its lots, those lots become invisible in this UI and cannot be closed through the
+      // normal workflow. To detect this condition, query for open lots without price data:
+      //   SELECT ol.symbol, COUNT(*) FROM open_lots ol
+      //   LEFT JOIN prices p ON ol.symbol = p.symbol
+      //   WHERE p.symbol IS NULL GROUP BY ol.symbol;
+      //
+      // WORKFLOW: Always close all lots BEFORE removing a security from the prices table.
+      if (lot.pl_pct === null) return false;
+      if (lot.pl_pct < debouncedPlFilter) return false;
 
-  const sortedLots = [...filteredLots].sort((a, b) => {
-    let aValue = a[sortField];
-    let bValue = b[sortField];
+      // Cost basis filter - use debounced value
+      if (lot.lot_basis === null) return false;
+      return lot.lot_basis >= debouncedBasisFilter;
+    });
+  }, [lots, symbolDrilldown, debouncedSelectedSymbol, termFilter, debouncedPlFilter, debouncedBasisFilter]);
 
-    // Handle null values
-    if (aValue === null) return sortDirection === 'asc' ? -1 : 1;
-    if (bValue === null) return sortDirection === 'asc' ? 1 : -1;
+  const sortedLots = useMemo(() => {
+    return [...filteredLots].sort((a, b) => {
+      let aValue = a[sortField];
+      let bValue = b[sortField];
 
-    // Special handling for dates
-    if (sortField === 'date_new') {
-      aValue = new Date(aValue as string).getTime();
-      bValue = new Date(bValue as string).getTime();
-    }
+      // Handle null values
+      if (aValue === null) return sortDirection === 'asc' ? -1 : 1;
+      if (bValue === null) return sortDirection === 'asc' ? 1 : -1;
 
-    // Compare values
-    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
+      // Special handling for dates
+      if (sortField === 'date_new') {
+        aValue = new Date(aValue as string).getTime();
+        bValue = new Date(bValue as string).getTime();
+      }
+
+      // Compare values
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredLots, sortField, sortDirection]);
 
   const SortIcon: React.FC<{ field: SortField }> = ({ field }) => {
     if (field !== sortField) return <span className="ml-1 text-gray-400">↕</span>;
