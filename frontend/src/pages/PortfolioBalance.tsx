@@ -53,6 +53,8 @@ const PortfolioBalance: React.FC = () => {
   const [filteredLots, setFilteredLots] = useState<PotentialLot[]>([]);
   const [groupedLots, setGroupedLots] = useState<GroupedLots>({});
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [minThreshold, setMinThreshold] = useState<number | null>(null);
+  const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +78,9 @@ const PortfolioBalance: React.FC = () => {
         ]);
         setLots(lotsResponse.data);
         setFilteredLots(lotsResponse.data);
-        setRecommendations(recommendationsResponse.data);
+        setRecommendations(recommendationsResponse.data.recommendations);
+        setMinThreshold(recommendationsResponse.data.min_threshold);
+        setPortfolioValue(recommendationsResponse.data.portfolio_value);
         setLoading(false);
       } catch (err) {
         setError('Failed to fetch data');
@@ -103,7 +107,9 @@ const PortfolioBalance: React.FC = () => {
         axios.get('/api/model-recommendations'),
         axios.get('/api/potential-lots')
       ]);
-      setRecommendations(recommendationsResponse.data);
+      setRecommendations(recommendationsResponse.data.recommendations);
+      setMinThreshold(recommendationsResponse.data.min_threshold);
+      setPortfolioValue(recommendationsResponse.data.portfolio_value);
       setLots(lotsResponse.data);
       setFilteredLots(lotsResponse.data);
     } catch (err: any) {
@@ -243,6 +249,11 @@ const PortfolioBalance: React.FC = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
             <div className="bg-blue-800 py-3 px-6">
               <h3 className="text-lg font-semibold text-white">Model Recommendations</h3>
+              {minThreshold !== null && portfolioValue !== null && (
+                <p className="text-xs text-blue-200 mt-1">
+                  Showing symbols with overamt &lt; ${Math.abs(minThreshold).toFixed(2)} (0.04% of ${portfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} portfolio value)
+                </p>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

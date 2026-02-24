@@ -15,6 +15,8 @@ interface Recommendation {
 
 const BuyRecommendations: React.FC = () => {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [minThreshold, setMinThreshold] = useState<number | null>(null);
+  const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +29,9 @@ const BuyRecommendations: React.FC = () => {
         throw new Error('Failed to fetch recommendations');
       }
       const data = await response.json();
-      setRecommendations(data);
+      setRecommendations(data.recommendations);
+      setMinThreshold(data.min_threshold);
+      setPortfolioValue(data.portfolio_value);
     } catch (err: any) {
       setError(err.message || 'Unknown error');
     } finally {
@@ -58,6 +62,11 @@ const BuyRecommendations: React.FC = () => {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div className="bg-blue-800 py-3 px-6">
           <h2 className="text-lg font-semibold text-white">Buy Recommendations</h2>
+          {minThreshold !== null && portfolioValue !== null && (
+            <p className="text-xs text-blue-200 mt-1">
+              Showing symbols with overamt &lt; ${Math.abs(minThreshold).toFixed(2)} (0.04% of ${portfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} portfolio value)
+            </p>
+          )}
         </div>
         {loading ? (
           <div className="p-6 text-gray-500 dark:text-gray-400">Loading recommendations...</div>

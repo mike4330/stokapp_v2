@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from app.db.session import get_db
-from app.schemas.mpt import ModelRecommendation, MPTData, MPTSymbol
+from app.schemas.mpt import ModelRecommendation, ModelRecommendationsResponse, MPTData, MPTSymbol
 from app.mpt_modeling import initiate_mpt_modeling, get_task_status
 
 router = APIRouter()
@@ -34,7 +34,7 @@ def get_symbols_with_allocation(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve symbols with allocation: {str(e)}")
 
-@router.get("/model-recommendations", response_model=List[ModelRecommendation])
+@router.get("/model-recommendations", response_model=ModelRecommendationsResponse)
 def get_model_recommendations(response: Response, db: Session = Depends(get_db)):
     # Prevent caching of this endpoint
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -61,7 +61,7 @@ def get_model_recommendations(response: Response, db: Session = Depends(get_db))
         df = pd.DataFrame(data, columns=columns)
         if df.empty:
             logger.warning("DataFrame is empty after query")
-            return []
+            return ModelRecommendationsResponse(recommendations=[], min_threshold=0.0, portfolio_value=0.0)
             
         # Debug dataframe contents
         logger.info(f"DataFrame columns: {df.columns.tolist()}")
@@ -144,31 +144,52 @@ def get_model_recommendations(response: Response, db: Session = Depends(get_db))
         df['z_score'] = df.apply(lambda row: calculate_z_score(row, scaler), axis=1)
         logger.info("Calculated z-scores successfully")
         
+        # Calculate dynamic threshold as a percentage of total portfolio value
+        portfolio_value_query = text("""
+            SELECT SUM(net_units * p.price)
+            FROM (
+                SELECT t.symbol,
+                       SUM(CASE WHEN units_remaining IS NULL THEN t.units ELSE units_remaining END) as net_units
+                FROM transactions t
+                WHERE t.xtype = 'Buy' AND t.disposition IS NULL
+                GROUP BY t.symbol
+                HAVING net_units > 0
+            ) holdings
+            JOIN prices p ON p.symbol = holdings.symbol
+        """)
+        portfolio_value = db.execute(portfolio_value_query).scalar() or 0.0
+        threshold_pct = 0.0004
+        overweight_min_thresh = -(portfolio_value * threshold_pct)
+        logger.info(f"Portfolio value: {portfolio_value:.2f}, dynamic threshold: {overweight_min_thresh:.2f}")
+
         # Filter and sort (matching reference implementation)
-        overweight_min_thresh = -6
         filtered_df = df[df['overamt'] < overweight_min_thresh]
-        
+
         if filtered_df.empty:
-            logger.warning("No symbols with overamt < -6, returning top 15 by z-score without filtering")
+            logger.warning(f"No symbols with overamt < {overweight_min_thresh:.2f}, returning top 15 by z-score without filtering")
             top15 = df.nsmallest(15, 'z_score')
         else:
             top15 = filtered_df.nsmallest(15, 'z_score')
-                
+
         logger.info(f"Top 15 recommendations found: {len(top15)} rows")
-        
+
         # Return as list of dicts
-        result = [
-            {
-                'symbol': row['symbol'],
-                'sectorshort': row['sectorshort'],
-                'z_score': float(row['z_score']),
-                'overamt': float(row['overamt']) if not pd.isna(row['overamt']) else 0.0
-            }
+        recs = [
+            ModelRecommendation(
+                symbol=row['symbol'],
+                sectorshort=row['sectorshort'],
+                z_score=float(row['z_score']),
+                overamt=float(row['overamt']) if not pd.isna(row['overamt']) else 0.0
+            )
             for _, row in top15.iterrows()
         ]
-        
-        logger.info(f"Returning {len(result)} recommendations")
-        return result
+
+        logger.info(f"Returning {len(recs)} recommendations")
+        return ModelRecommendationsResponse(
+            recommendations=recs,
+            min_threshold=overweight_min_thresh,
+            portfolio_value=float(portfolio_value),
+        )
     except Exception as e:
         logger = logging.getLogger(__name__)
         logger.error(f"Error in model-recommendations: {str(e)}", exc_info=True)

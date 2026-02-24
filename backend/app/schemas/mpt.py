@@ -13,4 +13,9 @@ class ModelRecommendation(BaseModel):
     symbol: str
     sectorshort: str
     z_score: float
-    overamt: float 
+    overamt: float
+
+class ModelRecommendationsResponse(BaseModel):
+    recommendations: list[ModelRecommendation]
+    min_threshold: float
+    portfolio_value: float
