@@ -27,38 +27,30 @@ interface SymbolWeightChartProps {
   symbol: string;
   color: string;
   data: WeightDataPoint[];
-  // Allow customization of the min y-axis percentage below the data minimum
-  minYAxisPadding?: number;
 }
 
-const SymbolWeightChart: React.FC<SymbolWeightChartProps> = ({ 
-  color, 
-  data,
-  minYAxisPadding = 0.1 // 10% below minimum by default
-}) => {
+const SymbolWeightChart: React.FC<SymbolWeightChartProps> = ({ color, data }) => {
   // Use a brighter color for the weights line and area
   const brightColor = color;
   const brightStroke = color;
   const brightFill = color + 'CC'; // Add alpha for more opacity if hex
 
-  const yAxisDomain = useMemo((): [number, string] => {
-    if (!data || data.length === 0) return [0, 'dataMax'];
-    
-    // Find minimum values in both weight and target
+  const yAxisDomain = useMemo((): [number, number] => {
+    if (!data || data.length === 0) return [0, 1];
+
     const allValues = data.flatMap(d => [d.weight, d.target]);
     const minValue = Math.min(...allValues);
     const maxValue = Math.max(...allValues);
-    
-    // Set minimum to be slightly lower than the smallest value
-    // but don't go below zero for weights
-    const padding = (maxValue - minValue) * minYAxisPadding;
+    const range = maxValue - minValue;
+
+    // Use 25% padding on both sides to emphasize variation.
+    // Fall back to 10% of the max if the range is zero (flat line).
+    const padding = range > 0 ? range * 0.25 : maxValue * 0.1;
     const yMin = Math.max(0, minValue - padding);
-    
-    // Round to a nice number to avoid odd starting points
-    const roundedYMin = Math.floor(yMin * 100) / 100;
-    
-    return [roundedYMin, 'dataMax'];
-  }, [data, minYAxisPadding]);
+    const yMax = maxValue + padding;
+
+    return [yMin, yMax];
+  }, [data]);
 
   return (
     <ResponsiveContainer width="98%" height={210}>
