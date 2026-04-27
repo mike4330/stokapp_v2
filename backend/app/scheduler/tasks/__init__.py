@@ -9,6 +9,7 @@ from .btc_price_task import update_btc_price
 from .rsi_task import update_rsi
 from .sector_pe_task import update_sector_pe
 from .price_history_task import update_price_history
+from .security_values_snapshot_task import snapshot_security_values
 
 # Create the main entry point for the scheduler
 def update_overamt():
@@ -173,4 +174,22 @@ def price_history_job():
         return success
     except Exception as e:
         logger.exception(f"Error in price_history_job: {e}")
+        return False
+
+def security_values_snapshot_job():
+    """
+    Entry point for the daily security_values snapshot job.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Executing security_values_snapshot_job")
+    try:
+        success = snapshot_security_values()
+        if success:
+            logger.info("security_values_snapshot_job completed successfully")
+        else:
+            logger.error("security_values_snapshot_job failed")
+        return success
+    except Exception as e:
+        logger.exception(f"Error in security_values_snapshot_job: {e}")
         return False

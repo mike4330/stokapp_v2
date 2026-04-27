@@ -142,4 +142,21 @@ def register_jobs(scheduler: BackgroundScheduler):
     )
     logger.info("Registered job: price_history_job (runs daily at 4:28 PM ET, weekdays only)")
 
+    # Register the daily security_values snapshot job at weekdays 16:31 ET
+    # (matches the legacy hist2.sh cron). One row per held symbol per day with
+    # close, shares, cost_basis, cum_divs, cbps, cum_real_gl. Idempotent.
+    scheduler.add_job(
+        func=tasks_module.security_values_snapshot_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour="16",
+            minute="31",
+            timezone=US_EASTERN
+        ),
+        id="security_values_snapshot_job",
+        name="Snapshot security_values (16:31 ET)",
+        replace_existing=True
+    )
+    logger.info("Registered job: security_values_snapshot_job (runs daily at 4:31 PM ET, weekdays only)")
+
     # Add additional jobs here as needed
