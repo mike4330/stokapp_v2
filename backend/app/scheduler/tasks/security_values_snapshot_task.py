@@ -12,85 +12,23 @@ so manual Run Now invocations don't double-insert.
 """
 import logging
 from datetime import date
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.db.positions import (
+    get_net_units,
+    get_cost_basis,
+    get_cum_dividends,
+    get_cum_realized_gain,
+    get_current_close,
+)
 
 logger = logging.getLogger(__name__)
 
 # Mirror legacy hist2.sh: skip 0386.HK (Hong Kong-listed; legacy explicitly omitted)
 EXCLUDED_SYMBOLS = {"0386.HK"}
-
-
-def _net_units(db: Session, symbol: str) -> float:
-    row = db.execute(
-        text("""
-            SELECT SUM(CASE
-                WHEN units_remaining IS NULL THEN units
-                ELSE units_remaining
-            END)
-            FROM transactions
-            WHERE xtype = 'Buy'
-              AND symbol = :symbol
-              AND disposition IS NULL
-        """),
-        {"symbol": symbol},
-    ).fetchone()
-    return float(row[0]) if row and row[0] else 0.0
-
-
-def _cost_basis(db: Session, symbol: str) -> float:
-    """Sum of price * units (or units_remaining if partial) across open Buy lots.
-
-    Equivalent to legacy `sym_costbasis` in portstats2.php and the
-    `php functions.php $f` call from hist2.sh.
-    """
-    row = db.execute(
-        text("""
-            SELECT SUM(price * COALESCE(units_remaining, units))
-            FROM transactions
-            WHERE xtype = 'Buy'
-              AND symbol = :symbol
-              AND disposition IS NULL
-        """),
-        {"symbol": symbol},
-    ).fetchone()
-    return float(row[0]) if row and row[0] else 0.0
-
-
-def _cum_divs(db: Session, symbol: str) -> float:
-    row = db.execute(
-        text("""
-            SELECT IFNULL(SUM(price * units), 0)
-            FROM transactions
-            WHERE xtype = 'Div' AND symbol = :symbol
-        """),
-        {"symbol": symbol},
-    ).fetchone()
-    return float(row[0]) if row else 0.0
-
-
-def _cum_realized_gain(db: Session, symbol: str) -> float:
-    row = db.execute(
-        text("""
-            SELECT IFNULL(SUM(gain), 0)
-            FROM transactions
-            WHERE xtype = 'Sell' AND symbol = :symbol
-        """),
-        {"symbol": symbol},
-    ).fetchone()
-    return float(row[0]) if row else 0.0
-
-
-def _current_close(db: Session, symbol: str) -> Optional[float]:
-    row = db.execute(
-        text("SELECT price FROM prices WHERE symbol = :symbol"),
-        {"symbol": symbol},
-    ).fetchone()
-    return float(row[0]) if row and row[0] is not None else None
 
 
 def _row_exists_for_today(db: Session, symbol: str, today: str) -> bool:
@@ -134,21 +72,21 @@ def snapshot_security_values() -> bool:
                     skipped_existing += 1
                     continue
 
-                shares = _net_units(db, symbol)
+                shares = get_net_units(db, symbol)
                 if shares <= 0:
                     skipped_no_position += 1
                     continue
 
-                close = _current_close(db, symbol)
+                close = get_current_close(db, symbol)
                 if close is None:
                     logger.warning(f"security_values_snapshot: no price for {symbol}")
                     skipped_no_price += 1
                     continue
 
-                cost_basis = _cost_basis(db, symbol)
+                cost_basis = get_cost_basis(db, symbol)
                 cbps = cost_basis / shares if shares else 0.0
-                cum_divs = _cum_divs(db, symbol)
-                cum_real_gl = _cum_realized_gain(db, symbol)
+                cum_divs = get_cum_dividends(db, symbol)
+                cum_real_gl = get_cum_realized_gain(db, symbol)
 
                 db.execute(
                     text("""

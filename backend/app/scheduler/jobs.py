@@ -159,4 +159,21 @@ def register_jobs(scheduler: BackgroundScheduler):
     )
     logger.info("Registered job: security_values_snapshot_job (runs daily at 4:31 PM ET, weekdays only)")
 
+    # Register the daily portfolio aggregate snapshot at weekdays 16:21 ET
+    # (matches legacy portstats2.php cron). Inserts one row to `historical`
+    # per day with portfolio totals + WMA/YMA averages of past returns.
+    scheduler.add_job(
+        func=tasks_module.portfolio_stats_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour="16",
+            minute="21",
+            timezone=US_EASTERN
+        ),
+        id="portfolio_stats_job",
+        name="Portfolio Stats / historical (16:21 ET)",
+        replace_existing=True
+    )
+    logger.info("Registered job: portfolio_stats_job (runs daily at 4:21 PM ET, weekdays only)")
+
     # Add additional jobs here as needed

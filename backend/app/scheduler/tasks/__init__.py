@@ -10,6 +10,7 @@ from .rsi_task import update_rsi
 from .sector_pe_task import update_sector_pe
 from .price_history_task import update_price_history
 from .security_values_snapshot_task import snapshot_security_values
+from .portfolio_stats_task import update_portfolio_stats
 
 # Create the main entry point for the scheduler
 def update_overamt():
@@ -192,4 +193,22 @@ def security_values_snapshot_job():
         return success
     except Exception as e:
         logger.exception(f"Error in security_values_snapshot_job: {e}")
+        return False
+
+def portfolio_stats_job():
+    """
+    Entry point for the daily portfolio aggregate snapshot job (historical table).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Executing portfolio_stats_job")
+    try:
+        success = update_portfolio_stats()
+        if success:
+            logger.info("portfolio_stats_job completed successfully")
+        else:
+            logger.error("portfolio_stats_job failed")
+        return success
+    except Exception as e:
+        logger.exception(f"Error in portfolio_stats_job: {e}")
         return False
