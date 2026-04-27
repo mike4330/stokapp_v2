@@ -89,5 +89,22 @@ def register_jobs(scheduler: BackgroundScheduler):
         replace_existing=True
     )
     logger.info("Registered job: btc_price_job (runs every hour on the hour, weekdays only)")
-    
-    # Add additional jobs here as needed 
+
+    # Register the RSI update job to run weekdays at 16:40 ET (after legacy
+    # download.py finishes at 16:28). Reads per-symbol CSVs from settings.DATA_DIR
+    # and writes MPT.RSI.
+    scheduler.add_job(
+        func=tasks_module.rsi_update_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour="16",
+            minute="40",
+            timezone=US_EASTERN
+        ),
+        id="rsi_update_job",
+        name="Update RSI from CSVs (16:40 ET)",
+        replace_existing=True
+    )
+    logger.info("Registered job: rsi_update_job (runs daily at 4:40 PM ET, weekdays only)")
+
+    # Add additional jobs here as needed

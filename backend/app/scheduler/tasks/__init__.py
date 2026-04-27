@@ -6,6 +6,7 @@ from .price_updater_task import update_prices
 from .moving_averages_task import run_moving_averages
 from .xag_price_task import update_xag_price
 from .btc_price_task import update_btc_price
+from .rsi_task import update_rsi
 
 # Create the main entry point for the scheduler
 def update_overamt():
@@ -116,4 +117,22 @@ def btc_price_job():
         return success
     except Exception as e:
         logger.exception(f"Error in btc_price_job: {e}")
-        return False 
+        return False
+
+def rsi_update_job():
+    """
+    Entry point for the RSI update job.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Executing rsi_update_job")
+    try:
+        success = update_rsi()
+        if success:
+            logger.info("rsi_update_job completed successfully")
+        else:
+            logger.error("rsi_update_job failed")
+        return success
+    except Exception as e:
+        logger.exception(f"Error in rsi_update_job: {e}")
+        return False
