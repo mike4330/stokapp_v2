@@ -151,11 +151,15 @@ Not a scheduler task. Local `/disk2` won't exist on the VPS — needs a separate
 ### Action items — local first, then carry to VPS
 
 - [ ] **Confirm `xag_price_job` covers `getxag.py`** — diff schedule + behavior, then comment out the cron line on the local PC
-- [ ] **New task: `mpt_price_history_task`** (port of `download.py`)
-  - Schedule weekdays 16:28 (or post-close window)
-  - Refresh 10-year daily closes for tickers from `tickers.txt` (or eventual `ticker_config` table)
-  - Decide storage: keep CSVs at first for parity with legacy MPT scripts, or land directly in a `price_history` SQLite table (preferred for VPS)
-  - Register in `backend/app/scheduler/jobs.py`
+- [x] **`price_history_task`** (port of `download.py`) — DONE
+  - Implemented at `backend/app/scheduler/tasks/price_history_task.py` (yfinance bulk download via curl_cffi chrome session, 10-yr window)
+  - Registered as `price_history_job` weekdays 16:28 ET, fireable from `/settings/scheduler` "Run Now"
+  - Symbol universe: `SELECT symbol FROM prices WHERE class IS NOT NULL` (excludes XAG, BTC-USD)
+  - DB→YF symbol translation map (`BRK.B` → `BRK-B`); columns renamed back to DB form before writing so filenames match consumer expectations
+  - Writes per-symbol CSVs in legacy format (date,close, no header) to `settings.HISTORICAL_DIR`
+  - **`HISTORICAL_DIR` setting** added to `core/config.py`, default `/var/www/mpmv2/backend/data/historical`
+  - **DATA_DIR flipped via `.env`** (local only — `.env` is gitignored) so `rsi_task` and `moving_averages_task` now read from the in-tree dir too
+  - Legacy `/etc/cron.d/stockprice` `download.py` line is now redundant — comment out after a few days of verification
 - [ ] **New task: `portfolio_stats_task`** (port of `portstats2.php`)
   - Schedule weekdays 16:21
   - Reproduce per-symbol position math + portfolio totals + WMA/YMA columns; INSERT daily row into `historical`
@@ -198,15 +202,14 @@ Risk: external scraper, fragile to upstream HTML changes — keep the table-clas
   - Reuse cwd-independent ticker source (same `ticker_config` table from Phase 2 of cron migration)
 - [x] **`rsi_update_task`** (port of `utils/rsi.py`) — DONE
   - Implemented at `backend/app/scheduler/tasks/rsi_task.py` (Wilder RSI via pandas EWMA, no pandas_ta dep)
-  - Wrapper `rsi_update_job` exported from `tasks/__init__.py`
-  - Registered in `jobs.py` at weekdays 16:40 ET, fireable from `/settings/scheduler` "Run Now"
-  - Reads CSVs from `settings.DATA_DIR` (still `/var/www/html/portfolio` per "option D" — revisit if/when CSVs move into mpmv2-owned storage)
+  - Registered as `rsi_update_job` at weekdays 16:40 ET, fireable from `/settings/scheduler` "Run Now"
+  - Reads CSVs from `settings.DATA_DIR`, now flipped via `.env` to `/var/www/mpmv2/backend/data/historical`
   - Writes `MPT.RSI`
-- [ ] **New task: `sector_pe_scraper_task`** (port of `utils/pescrape.py`)
-  - Schedule: daily after market close (e.g. weekdays 17:00 ET) or weekly — sector P/Es don't move fast
-  - Keep `SECTOR_NAME_MAPPING` and the table-class fallback chain
-  - Write `sectors.average_pe`
-- [ ] All three currently use cwd-relative paths and cwd-relative SQLite (`'../portfolio.sqlite'` in pescrape) — port to mpmv2's existing DB session pattern
+- [x] **`sector_pe_scraper_task`** (port of `utils/pescrape.py`) — DONE
+  - Implemented at `backend/app/scheduler/tasks/sector_pe_task.py` (3-tier table-class fallback, `SECTOR_NAME_MAPPING` preserved)
+  - Registered as `sector_pe_job` at weekdays 17:30 ET, fireable from `/settings/scheduler` "Run Now"
+  - Writes `sectors.average_pe`; logs scraped-vs-DB diff each run for upstream-change visibility
+- [ ] **`metadata_scraper_task`** still pending (port of `miscattr3.py`)
 
 ## Local environment modernization (in progress)
 

@@ -8,6 +8,7 @@ from .xag_price_task import update_xag_price
 from .btc_price_task import update_btc_price
 from .rsi_task import update_rsi
 from .sector_pe_task import update_sector_pe
+from .price_history_task import update_price_history
 
 # Create the main entry point for the scheduler
 def update_overamt():
@@ -154,4 +155,22 @@ def sector_pe_job():
         return success
     except Exception as e:
         logger.exception(f"Error in sector_pe_job: {e}")
+        return False
+
+def price_history_job():
+    """
+    Entry point for the 10-year price history downloader job.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Executing price_history_job")
+    try:
+        success = update_price_history()
+        if success:
+            logger.info("price_history_job completed successfully")
+        else:
+            logger.error("price_history_job failed")
+        return success
+    except Exception as e:
+        logger.exception(f"Error in price_history_job: {e}")
         return False

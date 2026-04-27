@@ -124,4 +124,22 @@ def register_jobs(scheduler: BackgroundScheduler):
     )
     logger.info("Registered job: sector_pe_job (runs daily at 5:30 PM ET, weekdays only)")
 
+    # Register the 10-year price history downloader to run weekdays at 16:28 ET.
+    # Matches the legacy /var/www/html/portfolio/download.py cron schedule.
+    # Writes per-symbol CSVs to settings.HISTORICAL_DIR (in-tree), feeding
+    # rsi_update_job (16:40) and moving_averages_job once DATA_DIR is flipped.
+    scheduler.add_job(
+        func=tasks_module.price_history_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour="16",
+            minute="28",
+            timezone=US_EASTERN
+        ),
+        id="price_history_job",
+        name="Download 10y Price History (16:28 ET)",
+        replace_existing=True
+    )
+    logger.info("Registered job: price_history_job (runs daily at 4:28 PM ET, weekdays only)")
+
     # Add additional jobs here as needed

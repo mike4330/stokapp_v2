@@ -105,4 +105,5 @@ static/*.png
 backend/data/portfolio.sqlite
 backend/data/portfolio1.sqlite
 backend/data/bak/portfolio.sqlite.BAD
+backend/data/historical/
 frontend/src/pages/DataEnrichment.tsx
