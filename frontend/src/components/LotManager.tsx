@@ -82,7 +82,8 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
   const [sortField, setSortField] = useState<SortField>('id');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [termFilter, setTermFilter] = useState<TermFilter>('all');
-  const [plFilter, setPlFilter] = useState<number>(-100);
+  const [plMin, setPlMin] = useState<number>(-100);
+  const [plMax, setPlMax] = useState<number>(100);
   const [basisFilter, setBasisFilter] = useState<number>(0);
   const [symbolDrilldown, setSymbolDrilldown] = useState<string | null>(null);
   const [symbolInput, setSymbolInput] = useState('');
@@ -91,10 +92,28 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
   const [allSymbols, setAllSymbols] = useState<string[]>([]);
   const [selectedLots, setSelectedLots] = useState<Set<number>>(new Set());
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [disabledAccounts, setDisabledAccounts] = useState<Set<string>>(new Set());
+
+  const allAccounts = useMemo(() => {
+    return Array.from(new Set(lots.map(lot => lot.acct))).sort();
+  }, [lots]);
+
+  const toggleAccount = (acct: string) => {
+    setDisabledAccounts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(acct)) {
+        newSet.delete(acct);
+      } else {
+        newSet.add(acct);
+      }
+      return newSet;
+    });
+  };
 
   // Debounced filter values
   const debouncedSelectedSymbol = useDebounce(selectedSymbol, 300);
-  const debouncedPlFilter = useDebounce(plFilter, 150);
+  const debouncedPlMin = useDebounce(plMin, 150);
+  const debouncedPlMax = useDebounce(plMax, 150);
   const debouncedBasisFilter = useDebounce(basisFilter, 150);
 
   // Calculate min and max basis values from the data
@@ -209,6 +228,8 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
 
   const filteredLots = useMemo(() => {
     return lots.filter(lot => {
+      // Account filter
+      if (disabledAccounts.has(lot.acct)) return false;
       // Symbol drilldown filter
       if (symbolDrilldown && lot.symbol !== symbolDrilldown) return false;
       // Symbol typeahead filter - use debounced value
@@ -224,7 +245,7 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
         if (termFilter === 'short' && isLongTerm) return false;
       }
 
-      // P/L percentage filter - use debounced value
+      // P/L percentage filter - use debounced values
       // IMPORTANT: Filters out lots where pl_pct is null to avoid comparison errors in the
       // next line. This happens when a security has been removed from the prices table
       // (typically after liquidation) but open lots remain due to data entry discrepancies.
@@ -238,13 +259,14 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
       //
       // WORKFLOW: Always close all lots BEFORE removing a security from the prices table.
       if (lot.pl_pct === null) return false;
-      if (lot.pl_pct < debouncedPlFilter) return false;
+      if (lot.pl_pct < debouncedPlMin) return false;
+      if (lot.pl_pct > debouncedPlMax) return false;
 
       // Cost basis filter - use debounced value
       if (lot.lot_basis === null) return false;
       return lot.lot_basis >= debouncedBasisFilter;
     });
-  }, [lots, symbolDrilldown, debouncedSelectedSymbol, termFilter, debouncedPlFilter, debouncedBasisFilter]);
+  }, [lots, symbolDrilldown, debouncedSelectedSymbol, termFilter, debouncedPlMin, debouncedPlMax, debouncedBasisFilter, disabledAccounts]);
 
   const sortedLots = useMemo(() => {
     return [...filteredLots].sort((a, b) => {
@@ -520,26 +542,81 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
                 </div>
               </div>
             </div>
-            <div className="flex flex-col gap-4 min-w-[250px]">
+            {allAccounts.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Accounts</span>
+                <div className="flex flex-col gap-1">
+                  {allAccounts.map(acct => (
+                    <label key={acct} className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={!disabledAccounts.has(acct)}
+                        onChange={() => toggleAccount(acct)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{acct}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col gap-4 min-w-[300px]">
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">P/L Filter</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap w-24">
-                    ≥ {plFilter}%
+                  <span className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap w-28">
+                    {plMin}% – {plMax}%
                   </span>
-                  <input
-                    type="range"
-                    min="-100"
-                    max="100"
-                    value={plFilter}
-                    onChange={(e) => setPlFilter(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer dark:bg-gray-600
-                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 
-                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 
-                      [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
-                      [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full 
-                      [&::-moz-range-thumb]:bg-blue-600 [&::-moz-range-thumb]:border-0"
-                  />
+                  <div className="relative w-full" style={{ height: '20px' }}>
+                    {/* Track background */}
+                    <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2 bg-gray-300 dark:bg-gray-600 rounded-lg" />
+                    {/* Active range highlight */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 h-2 bg-blue-500 rounded-lg"
+                      style={{
+                        left: `${((plMin + 100) / 200) * 100}%`,
+                        right: `${((100 - plMax) / 200) * 100}%`,
+                      }}
+                    />
+                    {/* Lower handle (min) - blue */}
+                    <input
+                      type="range"
+                      min="-100"
+                      max="100"
+                      value={plMin}
+                      onChange={e => setPlMin(Math.min(Number(e.target.value), plMax - 1))}
+                      className="absolute w-full top-0 h-full bg-transparent appearance-none cursor-pointer pointer-events-none
+                        [&::-webkit-slider-runnable-track]:bg-transparent
+                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4
+                        [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500
+                        [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
+                        [&::-webkit-slider-thumb]:pointer-events-auto
+                        [&::-moz-range-track]:bg-transparent
+                        [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full
+                        [&::-moz-range-thumb]:bg-blue-500 [&::-moz-range-thumb]:border-0
+                        [&::-moz-range-thumb]:pointer-events-auto"
+                      style={{ zIndex: plMin > plMax - 15 ? 5 : 3 }}
+                    />
+                    {/* Upper handle (max) - orange */}
+                    <input
+                      type="range"
+                      min="-100"
+                      max="100"
+                      value={plMax}
+                      onChange={e => setPlMax(Math.max(Number(e.target.value), plMin + 1))}
+                      className="absolute w-full top-0 h-full bg-transparent appearance-none cursor-pointer pointer-events-none
+                        [&::-webkit-slider-runnable-track]:bg-transparent
+                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4
+                        [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-400
+                        [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
+                        [&::-webkit-slider-thumb]:pointer-events-auto
+                        [&::-moz-range-track]:bg-transparent
+                        [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full
+                        [&::-moz-range-thumb]:bg-orange-400 [&::-moz-range-thumb]:border-0
+                        [&::-moz-range-thumb]:pointer-events-auto"
+                      style={{ zIndex: 4 }}
+                    />
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -577,6 +654,9 @@ const LotManager = forwardRef<LotManagerRef, LotManagerProps>((props, ref) => {
             </button>
           </div>
         )}
+      </div>
+      <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+        Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{sortedLots.length}</span> of <span className="font-semibold text-gray-700 dark:text-gray-200">{lots.length}</span> lots
       </div>
       <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
         <table className="w-full bg-white dark:bg-gray-800 shadow-md text-sm">
