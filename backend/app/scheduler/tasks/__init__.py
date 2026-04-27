@@ -7,6 +7,7 @@ from .moving_averages_task import run_moving_averages
 from .xag_price_task import update_xag_price
 from .btc_price_task import update_btc_price
 from .rsi_task import update_rsi
+from .sector_pe_task import update_sector_pe
 
 # Create the main entry point for the scheduler
 def update_overamt():
@@ -135,4 +136,22 @@ def rsi_update_job():
         return success
     except Exception as e:
         logger.exception(f"Error in rsi_update_job: {e}")
+        return False
+
+def sector_pe_job():
+    """
+    Entry point for the S&P 500 sector P/E scraper job.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Executing sector_pe_job")
+    try:
+        success = update_sector_pe()
+        if success:
+            logger.info("sector_pe_job completed successfully")
+        else:
+            logger.error("sector_pe_job failed")
+        return success
+    except Exception as e:
+        logger.exception(f"Error in sector_pe_job: {e}")
         return False

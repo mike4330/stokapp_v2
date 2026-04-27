@@ -107,4 +107,21 @@ def register_jobs(scheduler: BackgroundScheduler):
     )
     logger.info("Registered job: rsi_update_job (runs daily at 4:40 PM ET, weekdays only)")
 
+    # Register the S&P 500 sector P/E scraper to run weekdays at 17:30 ET.
+    # Sector P/Es from worldperatio.com don't move fast — daily after-close
+    # is plenty. Will eventually fold into a metadata-refresh pipeline.
+    scheduler.add_job(
+        func=tasks_module.sector_pe_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour="17",
+            minute="30",
+            timezone=US_EASTERN
+        ),
+        id="sector_pe_job",
+        name="Update S&P 500 Sector P/E (17:30 ET)",
+        replace_existing=True
+    )
+    logger.info("Registered job: sector_pe_job (runs daily at 5:30 PM ET, weekdays only)")
+
     # Add additional jobs here as needed
