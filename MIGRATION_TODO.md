@@ -20,8 +20,8 @@ Coexists with `/var/www/html/financial-transaction-manager/` (uses :5000).
 - [ ] SSH deploy key for `mike4330/stokapp_v2` on enceladus (current local remote uses a PAT in the URL — don't reuse)
 
 ## Repo bring-up
-- [ ] `git clone` stokapp_v2 into `/var/www/mpmv2`
-- [ ] Verify HEAD matches local (`3c66b49`)
+- [x] `git clone` stokapp_v2 into `/var/www/mpmv2` on enceladus — DONE (HTTPS+PAT URL)
+- [x] HEAD matches local snapshot from earlier today
 
 ## Backend
 - [ ] `python3 -m venv backend/venv` (Python 3.12 available)
@@ -211,17 +211,22 @@ Risk: external scraper, fragile to upstream HTML changes — keep the table-clas
   - Writes `sectors.average_pe`; logs scraped-vs-DB diff each run for upstream-change visibility
 - [ ] **`metadata_scraper_task`** still pending (port of `miscattr3.py`)
 
-## Local environment modernization (in progress)
+## Local environment modernization
 
 Done:
-- `backend/requirements.lock.txt` — authoritative pin from running venv (peewee dropped; resolves transitively).
-- `backend/requirements.txt` — curated top-level deps; fixes stale `pypfopt` → `pyportfolioopt==1.5.6`; adds `curl_cffi`/`requests`/`APScheduler` that the old file missed.
-- `backend/venv-new/` — built on Python 3.11.3 (pyenv). Clean install, smoke-tested on `:8099`: app imports, MPT endpoints return live data. Running `:8000` venv (Python 3.10) was untouched.
+- `backend/requirements.lock.txt` — authoritative pin from running venv (peewee dropped; resolves transitively). Committed.
+- `backend/requirements.txt` — curated top-level deps; fixes stale `pypfopt` → `pyportfolioopt==1.5.6`; adds `curl_cffi`/`requests`/`APScheduler` that the old file missed. Committed.
+- Python 3.12.13 installed locally via deadsnakes PPA. System python (3.10) untouched; `python3.12` is a parallel binary.
+- `backend/venv-new/` rebuilt on Python 3.12.13 from the curated `requirements.txt`. 60 packages, all `cp312` wheels, no source builds. Smoke-tested end-to-end (app imports, all 5 new task wrappers import, live endpoints respond on a side port).
+- **Production swapped to `venv-new/`** — running uvicorn now on Python 3.12.13. Local + VPS now harmonized on the same minor.
 
-Outstanding:
-- [ ] **Swap running app from `backend/venv/` to `backend/venv-new/`** — do during a maintenance window, not during the trading day. Restart risk only; new venv is verified.
-- [ ] Optional: install Python 3.12 locally (deadsnakes PPA) and rebuild `venv-new` on it, for true VPS-parity local testing. Not required — `pip download --python-version 3.12` already proved every package has 3.12 wheels.
-- [ ] Commit `backend/requirements.txt` + `backend/requirements.lock.txt` once the swap is done (or sooner — the files are correct regardless).
+Housekeeping (not blocking):
+- [ ] After a day or two of clean trading-day runs on `venv-new`, retire the old environment:
+  ```
+  rm -rf backend/venv          # old 3.10 venv
+  mv backend/venv-new backend/venv
+  ```
+  Then drop `backend/venv-new/` from `.gitignore` (the existing `backend/venv/` line covers the renamed dir). Restart uvicorn one more time on the renamed path.
 
 ## Other legacy items
 - [ ] _TBD — user has more legacy CLI workflows to enumerate_
