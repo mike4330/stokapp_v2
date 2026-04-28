@@ -5,10 +5,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Database settings
     DB_PATH: str
-    
-    # SEC Database settings
-    SEC_DB_PATH: str = "sec_data.db"  # Default to sec_data.db in the same directory as main DB
-    
+
     # Data directory for legacy CSV files (read by moving_averages_task and rsi_task)
     DATA_DIR: str = "/var/www/html/portfolio"  # Default to the original location
 

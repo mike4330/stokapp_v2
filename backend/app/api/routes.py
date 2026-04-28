@@ -26,8 +26,6 @@ from app.db.crud import (
     get_historical_returns_data
 )
 from app.schemas.visualization import SunburstResponse, SunburstData
-from app.db.sec_session import SECSessionLocal, get_sec_db
-from app.models.sec_models import SECCompanyInfo, SECFilingData
 
 # Import the new route modules
 from .portfolio_analytics_routes import router as portfolio_analytics_router

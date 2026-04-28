@@ -25,7 +25,6 @@ from .mpt_modeling import (
     list_repository_runs,
     get_repository_run
 )
-from app.api.secroutes import router as sec_router
 from app.api.portfolio_stream_routes import router as portfolio_stream_router
 
 # Use the configured logger
@@ -52,7 +51,6 @@ app.include_router(api_router, prefix="/api")
 app.include_router(crud_router, prefix="/api/crud")
 app.include_router(dividend_router, prefix="/api")
 app.include_router(old_routes_router, prefix="/api")
-app.include_router(sec_router, prefix="/api")
 app.include_router(mpt_router, prefix="/api")
 app.include_router(portfolio_stream_router, prefix="/api")
 
