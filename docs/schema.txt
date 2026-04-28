@@ -1,92 +1,14 @@
-CREATE TABLE IF NOT EXISTS "prices" (
-	"symbol"	TEXT UNIQUE,
-	"asset_class"	TEXT,
-	"price"	REAL CHECK("price" > 0),
-	"lastupdate"	INTEGER,
-	"alloc_target"	REAL,
-	"compidx"	REAL,
-	"compidx2"	REAL,
-	"stdev"	REAL,
-	"laststatupdate"	INTEGER,
-	"volat"	REAL,
-	"class"	TEXT,
-	"hlr"	REAL,
-	"mean50"	REAL,
-	"mean200"	REAL,
-	"divyield"	REAL
-, "vol90"	REAL);
-CREATE TABLE IF NOT EXISTS "security_values" (
-	"symbol"	TEXT,
-	"timestamp"	TEXT,
-	"high"	TEXT,
-	"close"	TEXT,
-	"volume"	TEXT,
-	"shares"	REAL,
-	"cost_basis"	REAL,
-	"return"	REAL,
-	"cum_divs"	REAL,
-	"cbps"	REAL,
-	"cum_real_gl"	REAL
-);
-CREATE TABLE IF NOT EXISTS "aux_attributes" (
-	"symbol"	TEXT UNIQUE,
-	"sector"	TEXT,
-	"industry"	TEXT,
-	"market_cap_cat"	TEXT,
-	"market_cap"	REAL,
-	"dividend_date"	TEXT
-, "expected_amount"	REAL);
-CREATE TABLE IF NOT EXISTS "asset_classes" (
-	"symbol"	TEXT,
-	"class"	TEXT
-);
-CREATE TABLE IF NOT EXISTS "sectors" (
-	"symbol"	TEXT,
-	"sector"	TEXT
-, "average_pe"	REAL);
-CREATE TABLE dividends
-    (symbol TEXT NOT NULL, declare_date TEXT NOT NULL, amount REAL, PRIMARY KEY (symbol, declare_date));
-CREATE TABLE IF NOT EXISTS "xagtmp" (
-	"field1"	TEXT,
-	"field2"	TEXT
-);
-CREATE TABLE IF NOT EXISTS "weights" (
-	"timestamp"	TEXT,
-	"symbol"	TEXT,
-	"weight"	INTEGER
-);
-CREATE TABLE IF NOT EXISTS "returns" (
-	"symbol"	TEXT,
-	"returnpct"	REAL
-);
-CREATE TABLE IF NOT EXISTS "NET_CASH_FROM_OPS" (
-	"symbol"	TEXT,
-	"start"	TEXT,
-	"end"	TEXT,
-	"raw"	INTEGER,
-	"act"	INTEGER
-);
-CREATE TABLE IF NOT EXISTS "transactions" (
-	"id"	INTEGER UNIQUE,
-	"date_new"	TEXT,
-	"symbol"	TEXT,
-	"xtype"	TEXT,
-	"acct"	TEXT,
-	"price"	REAL,
-	"units"	REAL,
-	"units_remaining"	REAL,
-	"gain"	REAL,
-	"lotgain"	REAL,
-	"term"	TEXT,
-	"disposition"	TEXT,
-	"datetime"	TEXT,
-	"fee"	REAL,
-	"note"	TEXT,
-	"tradetype"	TEXT,
-	PRIMARY KEY("id" AUTOINCREMENT)
-);
-CREATE TABLE sqlite_sequence(name,seq);
-CREATE TABLE IF NOT EXISTS "MPT" (
+-- Live schema snapshot of backend/data/portfolio.sqlite
+-- Regenerate from backend/ with:
+--   sqlite3 data/portfolio.sqlite .schema
+-- ...then re-annotate LEGACY/CRUFT comments below.
+--
+-- Tables marked LEGACY/CRUFT are not actively maintained. They are preserved
+-- for historical analysis only — do not introduce new code that writes to them.
+
+-- ============ TABLES ============
+
+CREATE TABLE "MPT" (
 	"symbol"	TEXT,
 	"target_alloc"	REAL,
 	"sectorshort"	TEXT,
@@ -106,17 +28,64 @@ CREATE TABLE IF NOT EXISTS "MPT" (
 	"market_cap_val"	DECIMAL(15, 2),
 	"RSI"	REAL
 , "fcf_ni_ratio"	REAL);
-CREATE TABLE portfolio_data (
-  gammainput REAL,
-  rgoal REAL,
-  lower_bound REAL,
-  upper_bound REAL,
-  hash_value TEXT UNIQUE,  -- Assuming hash is used for uniqueness
-  expected_return REAL,
-  volatility REAL,
-  sharpe_ratio REAL
+
+-- LEGACY/CRUFT: MPT2
+CREATE TABLE "MPT2" (
+	"symbol"	TEXT,
+	"target_alloc"	REAL,
+	"sectorshort"	TEXT,
+	"sector"	TEXT,
+	"industry"	TEXT,
+	"market_cap"	TEXT,
+	"pe"	REAL,
+	"range"	REAL,
+	"flag"	TEXT,
+	"avgflag"	TEXT,
+	"divyield"	REAL,
+	"beta"	REAL,
+	"recm"	TEXT,
+	"overamt"	REAL,
+	"target_price"	REAL,
+	"div_growth_rate"	REAL,
+	"market_cap_val"	DECIMAL(15, 2),
+	"RSI"	REAL
+, "fcf_ni_ratio"	REAL);
+
+-- LEGACY/CRUFT: NET_CASH_FROM_OPS
+CREATE TABLE "NET_CASH_FROM_OPS" (
+	"symbol"	TEXT,
+	"start"	TEXT,
+	"end"	TEXT,
+	"raw"	INTEGER,
+	"act"	INTEGER
 );
-CREATE TABLE IF NOT EXISTS "historical" (
+
+CREATE TABLE "asset_classes" (
+	"symbol"	TEXT,
+	"class"	TEXT
+);
+
+CREATE TABLE "aux_attributes" (
+	"symbol"	TEXT UNIQUE,
+	"sector"	TEXT,
+	"industry"	TEXT,
+	"market_cap_cat"	TEXT,
+	"market_cap"	REAL,
+	"dividend_date"	TEXT
+, "expected_amount"	REAL);
+
+CREATE TABLE dividends
+    (symbol TEXT NOT NULL, declare_date TEXT NOT NULL, amount REAL, PRIMARY KEY (symbol, declare_date));
+
+CREATE TABLE "expected_returns" (
+    run_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    expected_return REAL NOT NULL,
+    PRIMARY KEY (run_id, symbol),
+    FOREIGN KEY (run_id) REFERENCES mpt_results(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE "historical" (
 	"flag"	TEXT,
 	"date"	TEXT,
 	"value"	REAL,
@@ -140,27 +109,126 @@ CREATE TABLE IF NOT EXISTS "historical" (
 	"YMA3"	REAL,
 	"YMA4"	REAL
 );
-CREATE TABLE IF NOT EXISTS "MPT2" (
-	"symbol"	TEXT,
-	"target_alloc"	REAL,
-	"sectorshort"	TEXT,
-	"sector"	TEXT,
-	"industry"	TEXT,
-	"market_cap"	TEXT,
-	"pe"	REAL,
-	"range"	REAL,
-	"flag"	TEXT,
-	"avgflag"	TEXT,
+
+CREATE TABLE mpt_results (
+    run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME NOT NULL,
+    upper_bound REAL NOT NULL,
+    lower_bound REAL NOT NULL,
+    gamma REAL NOT NULL,
+    max_volatility REAL NOT NULL,
+    expected_return REAL NOT NULL,
+    volatility REAL NOT NULL,
+    sharpe_ratio REAL NOT NULL,
+    weights_stdev REAL  -- NULL allowed for historical data
+);
+
+-- LEGACY/CRUFT: portfolio
+CREATE TABLE portfolio (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    name TEXT NOT NULL,
+    shares INTEGER NOT NULL,
+    price REAL NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+-- LEGACY/CRUFT: portfolio_data
+CREATE TABLE portfolio_data (
+  gammainput REAL,
+  rgoal REAL,
+  lower_bound REAL,
+  upper_bound REAL,
+  hash_value TEXT UNIQUE,  -- Assuming hash is used for uniqueness
+  expected_return REAL,
+  volatility REAL,
+  sharpe_ratio REAL
+);
+
+CREATE TABLE "prices" (
+	"symbol"	TEXT UNIQUE,
+	"price"	REAL CHECK("price" > 0),
+	"asset_class"	TEXT,
+	"lastupdate"	INTEGER,
+	"alloc_target"	REAL,
+	"compidx"	REAL,
+	"compidx2"	REAL,
+	"stdev"	REAL,
+	"laststatupdate"	INTEGER,
+	"volat"	REAL,
+	"class"	TEXT,
+	"hlr"	REAL,
+	"mean50"	REAL,
+	"mean200"	REAL,
 	"divyield"	REAL,
-	"beta"	REAL,
-	"recm"	TEXT,
-	"overamt"	REAL,
-	"target_price"	REAL,
-	"div_growth_rate"	REAL,
-	"market_cap_val"	DECIMAL(15, 2),
-	"RSI"	REAL
-, "fcf_ni_ratio"	REAL);
-CREATE TABLE IF NOT EXISTS "transactions_ark" (
+	"vol90"	REAL
+);
+
+-- LEGACY/CRUFT: returns
+CREATE TABLE "returns" (
+	"symbol"	TEXT,
+	"returnpct"	REAL
+);
+
+CREATE TABLE "sectors" (
+	"symbol"	TEXT,
+	"sector"	TEXT
+, "average_pe"	REAL);
+
+CREATE TABLE "security_values" (
+	"symbol"	TEXT,
+	"timestamp"	TEXT,
+	"high"	TEXT,
+	"close"	REAL,
+	"volume"	TEXT,
+	"shares"	REAL,
+	"cost_basis"	REAL,
+	"return"	REAL,
+	"cum_divs"	REAL,
+	"cbps"	REAL,
+	"cum_real_gl"	REAL
+);
+
+-- LEGACY/CRUFT: sqlite_sequence
+CREATE TABLE sqlite_sequence(name,seq);
+
+-- LEGACY/CRUFT: sv_ark
+CREATE TABLE "sv_ark" (
+	"symbol"	TEXT,
+	"timestamp"	TEXT,
+	"high"	TEXT,
+	"close"	REAL,
+	"volume"	TEXT,
+	"shares"	REAL,
+	"cost_basis"	REAL,
+	"return"	REAL,
+	"cum_divs"	REAL,
+	"cbps"	REAL,
+	"cum_real_gl"	REAL
+);
+
+CREATE TABLE "transactions" (
+	"id"	INTEGER UNIQUE,
+	"date_new"	TEXT,
+	"symbol"	TEXT,
+	"xtype"	TEXT,
+	"acct"	TEXT,
+	"price"	REAL,
+	"units"	REAL,
+	"units_remaining"	REAL,
+	"gain"	REAL,
+	"lotgain"	REAL,
+	"term"	TEXT,
+	"disposition"	TEXT,
+	"datetime"	TEXT,
+	"fee"	REAL,
+	"note"	TEXT,
+	"tradetype"	TEXT,
+	PRIMARY KEY("id" AUTOINCREMENT)
+);
+
+-- LEGACY/CRUFT: transactions_ark
+CREATE TABLE "transactions_ark" (
 	"id"	INTEGER UNIQUE,
 	"date_new"	TEXT,
 	"symbol"	TEXT,
@@ -179,26 +247,54 @@ CREATE TABLE IF NOT EXISTS "transactions_ark" (
 	"tradetype"	TEXT,
 	PRIMARY KEY("id" )
 );
-CREATE TABLE portfolio (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol TEXT NOT NULL,
-    name TEXT NOT NULL,
-    shares INTEGER NOT NULL,
-    price REAL NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-CREATE INDEX wgt_idx on weights(symbol);
-CREATE INDEX "sv_sym_idx" ON "security_values" (
-	"symbol"
+
+-- LEGACY/CRUFT: w_ark
+CREATE TABLE "w_ark" ("timestamp" TEXT, "symbol" TEXT, "weight" INTEGER );
+
+CREATE TABLE "weights" (
+	"timestamp"	TEXT,
+	"symbol"	TEXT,
+	"weight"	REAL
 );
-CREATE INDEX "trx_idx" ON "transactions" (
-	"symbol"
+
+-- LEGACY/CRUFT: xagtmp
+CREATE TABLE "xagtmp" (
+	"field1"	TEXT,
+	"field2"	TEXT
 );
-CREATE INDEX "sym_idx" ON "MPT" (
-	"symbol"
-);
+
+-- ============ VIEWS  ============
+
 CREATE VIEW "open_lots" AS select id,acct,symbol,date_new,units,units_remaining,price,term,note from transactions
 where xtype = 'Buy'
 and disposition IS NULL
-and symbol NOT IN ('SNP','XAG')
-/* open_lots(id,acct,symbol,date_new,units,units_remaining,price,term,note) */;
+and symbol NOT IN ('SNP','XAG');
+
+-- ============ INDEXES ============
+
+CREATE INDEX "sym_idx" ON "MPT" (
+	"symbol"
+);
+
+CREATE INDEX idx_er_runid ON expected_returns(run_id);
+
+CREATE INDEX idx_er_symbol ON expected_returns(symbol);
+
+CREATE INDEX idx_mpt_timestamp ON mpt_results(timestamp);
+
+CREATE INDEX "sv_sym_idx" ON "security_values" (
+	"symbol"
+);
+
+CREATE INDEX "trx_idx" ON "transactions" (
+	"symbol"
+);
+
+CREATE INDEX "trx_xtype" ON "transactions" (
+	"xtype"
+);
+
+CREATE INDEX "wgt_idx" ON "weights" (
+	"symbol"
+);
+

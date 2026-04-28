@@ -10,6 +10,13 @@
 - SQLite at `backend/data/portfolio.sqlite`
 Coexists with `/var/www/html/financial-transaction-manager/` (uses :5000).
 
+## Status snapshot
+- **VPS bring-up:** repo cloned, venv built on Python 3.12.3, app boots, all 10 scheduler jobs register cleanly. Awaiting DNS, .env, real DB transfer, frontend, and systemd units before cutover.
+- **Local env modernized:** Python 3.12.13 (deadsnakes), `venv-new` running prod, manifest curated + locked.
+- **Cron migration:** 4 of 6 ported (`getxag`, `download`, `portstats2`, `hist2`); `updatedivs` still pending.
+- **MPT modeling:** redirected to nightly scheduled job + params-only UI. Schema docs updated. DB tables next.
+- **SEC sub-project:** fully expunged (1166 lines removed).
+
 ## Open questions
 - [ ] DNS: A record `pm.roetto.org` → enceladus IP (do we have access?)
 - [ ] Pick frontend port (confirm :3000 free on enceladus, else :3001)
@@ -24,17 +31,18 @@ Coexists with `/var/www/html/financial-transaction-manager/` (uses :5000).
 - [x] HEAD matches local snapshot from earlier today
 
 ## Backend
-- [ ] `python3 -m venv backend/venv` (Python 3.12 available)
-- [ ] `pip install -r backend/requirements.txt`
-- [ ] Copy `.env` / secrets from local (not in repo) — identify which files
-- [ ] Smoke test: `uvicorn` boots, hits a route, reads DB
+- [x] `python3 -m venv backend/venv` on enceladus (Python 3.12.3) — DONE
+- [x] `pip install -r backend/requirements.txt` — clean (60 cp312 wheels)
+- [x] Smoke test: `uvicorn` boots, scheduler registers all 10 jobs, endpoints return 200 — DONE on a side port
+- [ ] Create `.env` on VPS (DB_PATH, METAL_PRICE_API_KEY, DATA_DIR=in-tree)
 - [ ] systemd unit for uvicorn (model after FTM's `financial-tracker-backend.service`)
 
 ## Data
 - [ ] Stop local backend cleanly (checkpoint WAL) before copying sqlite
-- [ ] `scp backend/data/portfolio.sqlite*` to enceladus
+- [ ] `scp backend/data/portfolio.sqlite*` to enceladus (replaces stale committed snapshot)
 - [ ] `PRAGMA integrity_check` on remote
-- [ ] Decide on `sec_data.db` (also present locally) — copy or rebuild?
+- [ ] Transfer the per-symbol CSVs in `backend/data/historical/` (gitignored — needs scp at cutover, OR fire `price_history_job` on VPS once running)
+- [ ] ~~`sec_data.db`~~ — N/A, SEC sub-project expunged
 
 ## Frontend
 - [ ] `npm ci` on enceladus (do NOT copy node_modules)
@@ -62,48 +70,64 @@ The legacy app at `/var/www/html/portfolio/` has CLI workflows that must move
 into the web app before the local PC can be retired. More items will be added
 here as we walk through them.
 
-## MPT modeling (first item)
+## MPT modeling redirect
 
-**Today (legacy, manual CLI):**
-- `opt3.py` — primary pypfopt EfficientFrontier run; reads `tickers.txt` + `sectormap.txt` from cwd; writes `weights` + `mpt_results` in SQLite. Sector bounds hardcoded inline.
-- `opt4.py` — same engine, different bond split (32.5 vs 21.1).
-- `cvar-optimization-script.py` — CVaR / tail-risk variant.
-- Diagnostics (not core): `analyze_beta.py`, `analyze_variance.py`, `modelstab2.sh`.
-- `mpt.php` dashboard logic — **already ported** to mpmv2 `/model-recommendations`.
+**Strategy change (2026-04-28):** The interactive "what-if" modeling UI is being
+retired. The new shape: a **nightly scheduled job** runs one canonical model
+(emulating legacy `/var/www/html/portfolio/currentmodel`), and the UI shrinks to
+a **params-only editor** for the optimizer scalars + sector constraints.
 
-**State of mpmv2 MPT code:**
-- `backend/app/portfolio_optimization.py` — fetches prices & builds covariance, but never calls EfficientFrontier. **Engine is hollow.**
-- `backend/app/mpt_modeling.py` — task runner, but in-memory dict (lost on restart).
-- `backend/app/api/mptroutes.py` — picker fully ported; `/run-mpt-modeling` and `/task-status/{id}` are stubs.
-- `frontend/src/pages/MPTModelling.tsx` — form exists w/ hardcoded sector constraints, doesn't actually drive a run.
+Schema docs updated (`docs/schema.txt` regenerated, `docs/MPT_System_Documentation.md`
+gained "Current Database State" + status banner).
 
-### Phase 1 — make optimization actually run
-- [ ] Finish `portfolio_optimization.run_optimization()` (call EfficientFrontier w/ gamma, bounds, sector constraints)
-- [ ] Persist results to `mpt_results` + `weights`; replace in-memory task store with SQLite-backed `optimization_jobs` table
-- [ ] Wire `/run-mpt-modeling` + `/task-status/{id}`; make form poll it
+Decisions locked in:
+- **Single-row** `mpt_model_params` (no history; `mpt_results` already records gamma/lb/ub per run for past-run reproducibility).
+- `MPT2` table is cruft — leave alone.
+- Keep `expected_returns` writes (offline analysis use).
 
-### Phase 2 — kill file-based config
-- [ ] Migrate `tickers.txt` + `sectormap.txt` into a `ticker_config` table (cwd-relative file reads won't work on the VPS)
-- [ ] Use existing `prices` / `security_values` as primary data source; yfinance only via scheduler refresh
+Not in scope: CVaR (`cvar-optimization-script.py`) and `opt4.py` are dropped.
+Mean-variance only via `opt3.py`-equivalent.
 
-### Phase 3 — finish the UI
-- [ ] Form submits + polls; "save run" with a name; "allocation diff" view (current vs optimized + rebalance plan)
-- [ ] CVaR as an optimization-type toggle (single branch in engine)
+### Done
+- [x] **`opt3.py` switched to read from `HISTORICAL_DIR`** — no more in-script yfinance download; reads per-symbol CSVs produced by `price_history_job`. Handles BRK-B↔BRK.B filename translation.
+- [x] **Schema documentation** — `docs/schema.txt` regenerated from live DB (added 4 missing tables, fixed types, annotated 9 cruft tables); `docs/MPT_System_Documentation.md` updated with status banner + tables-of-record matrix.
 
-### Phase 4 — retire the CLI
-- [ ] Optional APScheduler job for periodic auto-optimization
-- [ ] Archive `/var/www/html/portfolio/opt*.py` + the CVaR script
+### Phase 1 — DB tables for params
+- [ ] Migration: create `mpt_model_params` (single-row scalars: gamma, target_risk, weight_lower, weight_upper, gamma_smooth) and `mpt_sector_constraints` (sector PK, lower, upper)
+- [ ] Seed `mpt_model_params` with current `currentmodel` values: γ=1.0929, target_risk=.1358, lb=0.00166, ub=0.046, gamma_smooth=0.37
+- [ ] Seed `mpt_sector_constraints` with the 14 sector rows currently hardcoded in `opt3.py:53-88`
 
-### Open questions (need user decision)
-- [ ] **Sector bounds source of truth:** (a) DB-backed `sector_constraints` table editable in UI, or (b) frontend supplies bounds w/ backend defaults? — gates Phase 1 design.
-- [ ] Is `expected_returns.csv` still populated? `analyze_variance.py` needs it; nothing in mpmv2 produces it.
-- [ ] Keep CVaR as a real option, or drop it (mean-variance only)?
+### Phase 2 — `mpt_model_run_task` scheduler job
+- [ ] New task: load params from the two new tables, build wide DataFrame from `HISTORICAL_DIR`, run pypfopt (EfficientFrontier with `L2_with_weight_smoothing`, sector constraints, `efficient_risk(target_risk)`)
+- [ ] Persist to `mpt_results` + `weights` + `expected_returns` (matching `opt3.py` today)
+- [ ] Apply weights → `MPT.target_alloc` and `prices.alloc_target` (matching legacy `import.sh`)
+- [ ] Schedule weekday evenings, **after** all upstream jobs (sector_pe at 17:30 → run model at 17:45 ET)
+- [ ] Idempotency: skip insert into `mpt_results` if a run for today already exists? Or always insert (multiple runs per day are fine)? Decision needed.
+
+### Phase 3 — Params UI
+- [ ] `GET /api/mpt/params` — returns both tables
+- [ ] `PUT /api/mpt/params` — atomic update of both
+- [ ] New simplified page: `frontend/src/pages/MPTParams.tsx` — table view of params + sector constraints, edit + save, "Run Now" button (reuses `/scheduler/job/{id}/run-now`)
+- [ ] Tear out the old `MPTModelling.tsx` (872 lines, what-if UI), `mpt_modeling.py` (in-memory task store), and the `/run-mpt-modeling` + `/task-status/{id}` stub endpoints
+- [ ] Remove App.tsx route + Navbar link for the old MPTModelling page
+
+### Phase 4 — Retire legacy CLI
+- [ ] Once nightly job is verified, archive `/var/www/html/portfolio/opt3.py`, `opt4.py`, `cvar-optimization-script.py`, `currentmodel`, `import.sh`
 
 ## Cron jobs → app scheduler
 
-Source: `/etc/cron.d/stockprice` (active uncommented entries only) plus 3 manually-run scripts (`miscattr3.py`, `utils/rsi.py`, `utils/pescrape.py`).
-App scheduler already registers in `backend/app/scheduler/jobs.py`: `update_overamt`, `price_updater`, `moving_averages_job`, `xag_price_job`, `btc_price_job`.
+Source: `/etc/cron.d/stockprice` plus manually-run scripts (`miscattr3.py`,
+`utils/rsi.py`, `utils/pescrape.py`).
 **Plan: migrate to the LOCAL app scheduler first, then carry over with the VPS.**
+
+App scheduler currently registers 10 jobs in `backend/app/scheduler/jobs.py`:
+`update_overamt`, `price_updater`, `moving_averages_job`, `xag_price_job`,
+`btc_price_job`, `rsi_update_job`, `sector_pe_job`, `price_history_job`,
+`security_values_snapshot_job`, `portfolio_stats_job`.
+
+**Remaining cron entries:** rsync backup (separate concern), `updatedivs.sh`
+(weekly Saturday — pending). Also pending: `metadata_scraper_task` (port of
+`miscattr3.py`, off-hours weekday).
 
 ### Architecture: build atomic, unify at the end
 
@@ -150,31 +174,17 @@ Not a scheduler task. Local `/disk2` won't exist on the VPS — needs a separate
 
 ### Action items — local first, then carry to VPS
 
-- [ ] **Confirm `xag_price_job` covers `getxag.py`** — diff schedule + behavior, then comment out the cron line on the local PC
-- [x] **`price_history_task`** (port of `download.py`) — DONE
-  - Implemented at `backend/app/scheduler/tasks/price_history_task.py` (yfinance bulk download via curl_cffi chrome session, 10-yr window)
-  - Registered as `price_history_job` weekdays 16:28 ET, fireable from `/settings/scheduler` "Run Now"
-  - Symbol universe: `SELECT symbol FROM prices WHERE class IS NOT NULL` (excludes XAG, BTC-USD)
-  - DB→YF symbol translation map (`BRK.B` → `BRK-B`); columns renamed back to DB form before writing so filenames match consumer expectations
-  - Writes per-symbol CSVs in legacy format (date,close, no header) to `settings.HISTORICAL_DIR`
-  - **`HISTORICAL_DIR` setting** added to `core/config.py`, default `/var/www/mpmv2/backend/data/historical`
-  - **DATA_DIR flipped via `.env`** (local only — `.env` is gitignored) so `rsi_task` and `moving_averages_task` now read from the in-tree dir too
-  - Legacy `/etc/cron.d/stockprice` `download.py` line is now redundant — comment out after a few days of verification
-- [ ] **New task: `portfolio_stats_task`** (port of `portstats2.php`)
-  - Schedule weekdays 16:21
-  - Reproduce per-symbol position math + portfolio totals + WMA/YMA columns; INSERT daily row into `historical`
-  - Reuse existing position/cost-basis logic where it already lives in mpmv2 (avoid re-implementing) — audit `db/crud.py` and `overamt_task.py` first
-- [ ] **New task: `security_values_snapshot_task`** (port of `hist2.sh`)
-  - Schedule weekdays 16:31
-  - For each held symbol, INSERT into `security_values` (close, shares, cost_basis, cum_divs, cbps, cum_real_gl)
-  - Drop the chained `movingaverages.sh` — `moving_averages_job` handles it
-- [ ] **New task: `dividend_growth_update_task`** (port of `updatedivs.sh` + `divgrowth.sh`)
-  - Schedule Saturday 03:21
+- [x] **`getxag.py` retired** — covered by `xag_price_job`; cron line commented out on local
+- [x] **`download.py` retired** — port at `price_history_task.py` (registered as `price_history_job` weekdays 16:28 ET). Reads from DB, writes per-symbol CSVs to `HISTORICAL_DIR`. Includes BRK.B↔BRK-B translation.
+- [x] **`portstats2.php` retired** — port at `portfolio_stats_task.py` (registered weekdays 16:21 ET). Per-symbol position math + portfolio totals + WMA/YMA averages, INSERT into `historical`. WMA/YMA windows extensible via `RETURN_AVERAGES` dataclass list. Verified byte-equal vs legacy.
+- [x] **`hist2.sh` retired** — port at `security_values_snapshot_task.py` (registered weekdays 16:31 ET). Verified column-for-column match against legacy. Idempotent on (symbol, today). Position-math helpers extracted to shared `app/db/positions.py`.
+- [ ] **`dividend_growth_update_task`** still pending (port of `updatedivs.sh` + `divgrowth.sh`)
+  - Schedule Saturday 03:21 ET
   - Per-symbol pull with rate-limit (legacy uses 65s sleep — keep or replace with a real backoff)
   - Read `divgrowth.sh` to understand source/computation before porting (not yet read)
   - Write `prices.div_growth_rate`
 - [ ] **Backups (separate from scheduler):** decide local strategy (keep `/disk2` rsync as-is for now) and VPS strategy (`/var/backups/mpmv2/` cron, or APScheduler job using `sqlite3 .backup`)
-- [ ] **Rollover discipline:** when each new app task is live and verified locally, comment out the matching `/etc/cron.d/stockprice` line on the local PC to prevent double-runs
+- [x] **Rollover discipline:** legacy `/etc/cron.d/stockprice` already has `getxag.py` and `download.py` lines commented out. Comment out `portstats2.php` and `hist2.sh` once those have run a few clean trading days alongside.
 
 ### Additional legacy scripts to schedule (not in `/etc/cron.d/stockprice`, run manually today)
 
@@ -196,20 +206,13 @@ Deps: requests, beautifulsoup4 — both already present (bs4 is a yfinance trans
 Risk: external scraper, fragile to upstream HTML changes — keep the table-class fallback logic when porting.
 
 ### Action items
-- [ ] **New task: `metadata_scraper_task`** (port of `miscattr3.py`)
-  - Schedule: weekly weekday morning (legacy doesn't have a fixed schedule — pick something reasonable, e.g. weekdays 06:00 ET)
-  - Reuse the exclusion list, FCF/NI calc, market-cap labels; write to `MPT` table
-  - Reuse cwd-independent ticker source (same `ticker_config` table from Phase 2 of cron migration)
-- [x] **`rsi_update_task`** (port of `utils/rsi.py`) — DONE
-  - Implemented at `backend/app/scheduler/tasks/rsi_task.py` (Wilder RSI via pandas EWMA, no pandas_ta dep)
-  - Registered as `rsi_update_job` at weekdays 16:40 ET, fireable from `/settings/scheduler` "Run Now"
-  - Reads CSVs from `settings.DATA_DIR`, now flipped via `.env` to `/var/www/mpmv2/backend/data/historical`
-  - Writes `MPT.RSI`
-- [x] **`sector_pe_scraper_task`** (port of `utils/pescrape.py`) — DONE
-  - Implemented at `backend/app/scheduler/tasks/sector_pe_task.py` (3-tier table-class fallback, `SECTOR_NAME_MAPPING` preserved)
-  - Registered as `sector_pe_job` at weekdays 17:30 ET, fireable from `/settings/scheduler` "Run Now"
-  - Writes `sectors.average_pe`; logs scraped-vs-DB diff each run for upstream-change visibility
+- [x] **`rsi_update_task`** — DONE (`rsi_task.py`, weekdays 16:40 ET, hand-rolled Wilder RSI via pandas EWMA, writes `MPT.RSI`)
+- [x] **`sector_pe_scraper_task`** — DONE (`sector_pe_task.py`, weekdays 17:30 ET, writes `sectors.average_pe`, logs scraped-vs-DB diff per run)
 - [ ] **`metadata_scraper_task`** still pending (port of `miscattr3.py`)
+  - Schedule: weekdays AM, off-trading-window (e.g. 06:00 ET)
+  - Per-ticker yfinance.Ticker.info pull with random 1–4s delay (matches legacy)
+  - Writes MPT.{beta, pe, market_cap_val, market_cap, recm, industry, fcf_ni_ratio}
+  - All deps already in venv
 
 ## Local environment modernization
 
@@ -229,4 +232,15 @@ Housekeeping (not blocking):
   Then drop `backend/venv-new/` from `.gitignore` (the existing `backend/venv/` line covers the renamed dir). Restart uvicorn one more time on the renamed path.
 
 ## Other legacy items
-- [ ] _TBD — user has more legacy CLI workflows to enumerate_
+- [ ] _TBD — additional legacy CLI workflows surface as needed_
+
+## Done in this migration cycle
+- ✅ VPS clone + venv smoke test (Python 3.12.3)
+- ✅ Local Python harmonized to 3.12 (deadsnakes); production swapped to `venv-new`
+- ✅ Curated `backend/requirements.txt` + `requirements.lock.txt` committed
+- ✅ Five scheduler tasks added: `rsi_update`, `sector_pe`, `price_history`, `security_values_snapshot`, `portfolio_stats`
+- ✅ Position-math helpers extracted to `backend/app/db/positions.py`
+- ✅ `legacy opt3.py` rewired to read from in-tree `HISTORICAL_DIR`
+- ✅ SEC sub-project expunged (~1170 LOC, 14 files)
+- ✅ `LotManager.tsx` filter improvements (P/L range + per-account toggles)
+- ✅ Schema docs regenerated; `MPT_System_Documentation.md` updated with current-state matrix

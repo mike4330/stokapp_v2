@@ -1,7 +1,51 @@
 # MPT Modeling System Documentation
 
+> **Status (2026-04-28):** The interactive "what-if" UI described below is being
+> retired. The optimization engine in `backend/app/portfolio_optimization.py`
+> is presently hollow (does not call the optimizer) and `/api/run-mpt-modeling`
+> and `/api/task-status/{id}` are stubs. The system is being redirected to a
+> nightly scheduled job that runs a single canonical model — emulating the
+> legacy `/var/www/html/portfolio/currentmodel` pipeline (`opt3.py` + `import.sh`)
+> — with a simplified params-only UI on top of new `mpt_model_params` and
+> `mpt_sector_constraints` tables. See "Current Database State" below; sections
+> from "API Endpoints" onward describe the prior design and are kept for
+> historical context only.
+
 ## Overview
 This system implements Modern Portfolio Theory (MPT) optimization for portfolio management. It consists of a React-based frontend and a Python FastAPI backend, providing portfolio optimization capabilities with various objectives and constraints. The system dynamically loads symbols from the database and supports real-time data refresh from Yahoo Finance.
+
+## Current Database State
+
+Authoritative schema lives in `docs/schema.txt` (regenerable from the live DB).
+This section describes only the tables that participate in the MPT pipeline.
+
+### Live tables (read or written by current code)
+
+| Table | Role | Writers | Readers |
+|---|---|---|---|
+| `MPT` | Picker source-of-truth — one row per tracked symbol with `target_alloc`, `RSI`, `pe`, `fcf_ni_ratio`, `sector`, `overamt`, `flag`, etc. | `overamt_task` (overamt/flag), `rsi_update_job` (RSI), legacy `import.sh` (target_alloc), legacy `miscattr3.py` (beta/pe/etc.) | `/api/model-recommendations`, `/api/mpt/*` endpoints |
+| `prices` | Latest price per symbol + technical aggregates (`mean50`, `mean200`, `volat`, `hlr`, `divyield`, `vol90`, `alloc_target`) | `price_updater_task`, `xag_price_job`, `btc_price_job`, `moving_averages_task`, legacy `import.sh` (alloc_target) | Most charts; `/api/model-recommendations` |
+| `sectors` | Per-symbol sector classification + sector P/E (`average_pe`) | `sector_pe_job` (average_pe) | `/api/model-recommendations` (PE_diff) |
+| `weights` | Historical optimizer outputs — one row per symbol per run | Legacy `opt3.py` (today); planned `mpt_model_run_task` | Reports / charts |
+| `mpt_results` | One row per optimizer run (gamma, lb, ub, target risk, expected_return, volatility, sharpe_ratio, weights_stdev) | Legacy `opt3.py` (today); planned `mpt_model_run_task` | Reports / charts |
+| `expected_returns` | Per run × symbol expected returns. Offline analysis only — not consumed by app code. | Legacy `opt3.py` (today); planned `mpt_model_run_task` | (offline notebooks) |
+| `historical` | Daily portfolio totals + WMA/YMA averages of past returns | `portfolio_stats_task` | Portfolio performance charts, `db/crud.py` |
+| `security_values` | Daily per-symbol position snapshots (close, shares, cost_basis, cum_divs, cbps, cum_real_gl) | `security_values_snapshot_task` | History charts |
+
+### Planned new tables (not yet created)
+
+| Table | Purpose |
+|---|---|
+| `mpt_model_params` | Single-row table holding the active optimizer scalars (`gamma`, `target_risk`, `weight_lower`, `weight_upper`, `gamma_smooth`). Editable from the params UI; read by `mpt_model_run_task` at run time. |
+| `mpt_sector_constraints` | One row per sector (`sector` PK, `lower`, `upper`). Replaces the hardcoded `sector_lower`/`sector_upper` dicts in `opt3.py`. Editable from the params UI; read by `mpt_model_run_task`. |
+
+### Legacy / cruft (do not write to)
+
+`MPT2`, `portfolio_data`, `portfolio`, `returns`, `xagtmp`, `sv_ark`, `w_ark`,
+`transactions_ark`, `NET_CASH_FROM_OPS` — historical artifacts. See `schema.txt`
+LEGACY/CRUFT annotations.
+
+
 
 ## Key Features
 - **Dynamic Symbol Loading**: Automatically includes all securities with target allocations > 0 from the MPT database table
