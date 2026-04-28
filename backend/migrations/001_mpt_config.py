@@ -35,26 +35,32 @@ INITIAL_PARAMS = {
 
 # Seed values resolved from opt3.py:39-88
 # bonds_total=0.211, dbonds_share=0.694, baseline_lower=0.0624, tolerance=0.01
+# All bound values are rounded to 6 decimal places to eliminate float64
+# arithmetic noise (e.g., 0.0624 + 0.01 produces 0.07239999999999999 raw).
+_PRECISION = 6
 _BONDS_TOTAL = 0.211
 _DBONDS_SHARE = 0.694
 _BASELINE = 0.0624
 _TOLERANCE = 0.01
 
+def _r(v: float) -> float:
+    return round(v, _PRECISION)
+
 INITIAL_SECTOR_CONSTRAINTS = [
     # (sector, lower, upper)
-    ("DBonds",                 _BONDS_TOTAL * _DBONDS_SHARE,
-                               _BONDS_TOTAL * _DBONDS_SHARE + _TOLERANCE),
-    ("FBonds",                 _BONDS_TOTAL * (1 - _DBONDS_SHARE),
-                               _BONDS_TOTAL * (1 - _DBONDS_SHARE) + _TOLERANCE),
+    ("DBonds",                 _r(_BONDS_TOTAL * _DBONDS_SHARE),
+                               _r(_BONDS_TOTAL * _DBONDS_SHARE + _TOLERANCE)),
+    ("FBonds",                 _r(_BONDS_TOTAL * (1 - _DBONDS_SHARE)),
+                               _r(_BONDS_TOTAL * (1 - _DBONDS_SHARE) + _TOLERANCE)),
     ("Commodities",            0.025,    0.058),
-    ("Communication Services", _BASELINE, _BASELINE + _TOLERANCE),
-    ("Consumer Discretionary", _BASELINE, _BASELINE + _TOLERANCE),
-    ("Consumer Staples",       _BASELINE, _BASELINE + _TOLERANCE),
-    ("Energy",                 _BASELINE, _BASELINE + _TOLERANCE),
-    ("Financials",             _BASELINE, _BASELINE + _TOLERANCE),
-    ("Healthcare",             _BASELINE, _BASELINE + _TOLERANCE),
-    ("Industrials",            _BASELINE, _BASELINE + _TOLERANCE),
-    ("Materials",              _BASELINE, _BASELINE + _TOLERANCE),
+    ("Communication Services", _BASELINE, _r(_BASELINE + _TOLERANCE)),
+    ("Consumer Discretionary", _BASELINE, _r(_BASELINE + _TOLERANCE)),
+    ("Consumer Staples",       _BASELINE, _r(_BASELINE + _TOLERANCE)),
+    ("Energy",                 _BASELINE, _r(_BASELINE + _TOLERANCE)),
+    ("Financials",             _BASELINE, _r(_BASELINE + _TOLERANCE)),
+    ("Healthcare",             _BASELINE, _r(_BASELINE + _TOLERANCE)),
+    ("Industrials",            _BASELINE, _r(_BASELINE + _TOLERANCE)),
+    ("Materials",              _BASELINE, _r(_BASELINE + _TOLERANCE)),
     ("Tech",                   _BASELINE, 0.0692),
     ("Real Estate",            0.0606,   0.0698),
     ("Precious Metals",        0.0360,   0.0520),

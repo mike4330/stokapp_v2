@@ -1,873 +1,229 @@
 /*
- * Copyright (C) 2025 Mike Roetto <mike@roetto.org>
+ * Copyright (C) 2025-2026 Mike Roetto <mike@roetto.org>
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * With assistance from Claude (Anthropic)
+ * MPT model parameters editor.
+ *
+ * Replaces the legacy "what-if" optimizer UI (872 lines, in-process job runner)
+ * with a dense form bound to the three config tables seeded by migration 001:
+ *   mpt_model_params       — single-row optimizer scalars
+ *   mpt_sector_constraints — per-sector lower/upper bounds
+ *   mpt_universe           — symbol universe + sector classification
+ *
+ * Read-only at this stage; save is wired in a follow-up.
  */
-import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
 import { Helmet } from 'react-helmet-async';
 
-interface OptimizationConstraints {
+interface ModelParams {
   gamma: number;
-  target_return: number;
-  lower_bound: number;
-  upper_bound: number;
-  refresh_data: boolean;
-  sector_lower: { [key: string]: number };
-  sector_upper: { [key: string]: number };
+  target_risk: number;
+  weight_lower: number;
+  weight_upper: number;
+  gamma_smooth: number;
+  updated_at: string;
+  updated_by: string | null;
+  notes: string | null;
 }
 
 interface SectorConstraint {
-  min: number;
-  max: number;
+  sector: string;
+  lower: number;
+  upper: number;
+  updated_at: string;
 }
 
-interface SectorConstraints {
-  [key: string]: SectorConstraint;
+interface UniverseRow {
+  symbol: string;
+  sector: string;
+  in_modeling: boolean;
+  notes: string | null;
+  updated_at: string;
 }
 
-interface OptimizationDebugInfo {
-  config_files: {
-    status: string;
-    message?: string;
-    error?: string;
-    tickers_count: number;
-    sectors_count: number;
-    data_source?: string;
-    query_info?: {
-      symbols_with_allocation: number;
-      sectors_mapped: number;
-    };
-    fbonds_dbonds_overrides?: {
-      [symbol: string]: string;
-    };
-    override_warning?: string;
-  };
-  optimization: {
-    status: string;
-    solver_status?: string;
-    message?: string;
-    data_shape?: string;
-    constraints: {
-      gamma: number;
-      target_return: number;
-      lower_bound: number;
-      upper_bound: number;
-      refresh_data: boolean;
-      sector_constraints?: {
-        [key: string]: {
-          min: number;
-          max: number;
-        };
-      };
-    };
-  };
+interface ParamsResponse {
+  params: ModelParams | null;
+  sector_constraints: SectorConstraint[];
+  universe: UniverseRow[];
 }
 
-interface ModelingResult {
-  weights: { [key: string]: number };
-  expected_return: number;
-  volatility: number;
-  sharpe_ratio: number;
-  sector_weights: { [key: string]: number };
-  debug_info: OptimizationDebugInfo;
-}
-
-interface SaveToRepoResponse {
-  success: boolean;
-  run_id?: string;
-  error?: string;
-}
-
-const DEFAULT_SECTOR_CONSTRAINTS: SectorConstraints = {
-  'DBonds': { min: 0.225875, max: 0.235875 },
-  'FBonds': { min: 0.099125, max: 0.109125 },
-  'Commodities': { min: 0.025, max: 0.063 },
-  'Misc': { min: 0.0125, max: 0.0125 },
-  'Communication Services': { min: 0.0531, max: 0.063 },
-  'Consumer Discretionary': { min: 0.0534, max: 0.063 },
-  'Consumer Staples': { min: 0.0534, max: 0.063 },
-  'Energy': { min: 0.0438, max: 0.063 },
-  'Financials': { min: 0.0534, max: 0.063 },
-  'Healthcare': { min: 0.0534, max: 0.08 },
-  'Industrials': { min: 0.0534, max: 0.063 },
-  'Materials': { min: 0.0534, max: 0.063 },
-  'Tech': { min: 0.0674, max: 0.20 },
-  'Real Estate': { min: 0.0534, max: 0.063 },
-  'Precious Metals': { min: 0.05, max: 0.05 },
-  'Utilities': { min: 0.0494, max: 0.063 },
-};
+const fmtPct = (v: number) => (v * 100).toFixed(2) + '%';
+// Bound values are stored to 6dp in the DB; display matches.
+const fmt6 = (v: number) => v.toFixed(6);
 
 const MPTModelling: React.FC = () => {
-  const [gamma, setGamma] = useState('1.98');
-  const [targetReturn, setTargetReturn] = useState('0.07');
-  const [targetRisk, setTargetRisk] = useState('0.1286');
-  const [lowerBound, setLowerBound] = useState('0.00131');
-  const [upperBound, setUpperBound] = useState('0.0482');
-  const [objective, setObjective] = useState('max_sharpe');
-  const [useSectorConstraints, setUseSectorConstraints] = useState(false);
-  const [modelingResult, setModelingResult] = useState<ModelingResult | null>(null);
-  const [modelingLoading, setModelingLoading] = useState(false);
-  const [modelingError, setModelingError] = useState<string | null>(null);
-  const [refreshData, setRefreshData] = useState(false);
-  const [dataStatus, setDataStatus] = useState<string>('Data file status unknown');
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [sectorConstraints, setSectorConstraints] = useState<SectorConstraints>(DEFAULT_SECTOR_CONSTRAINTS);
-  const [savingToRepo, setSavingToRepo] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isDebugExpanded, setIsDebugExpanded] = useState(false);
-  const [isSectorConstraintsExpanded, setIsSectorConstraintsExpanded] = useState(true);
-  const [dataLatestDate, setDataLatestDate] = useState<string | null>(null);
+  const [data, setData] = useState<ParamsResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [universeFilter, setUniverseFilter] = useState<'modeling' | 'all'>('modeling');
 
-  // Check data file status on component mount
   useEffect(() => {
-    const checkDataFileStatus = async () => {
-      try {
-        setDataStatus('Checking data file status...');
-        
-        // Fetch data file status and latest date
-        const response = await fetch('/api/data-status');
-        
-        if (!response.ok) throw new Error('Failed to check data file status');
-        
-        const data = await response.json();
-        const latestDate = data.latest_date || null;
-        
-        if (latestDate) {
-          setDataLatestDate(latestDate);
-          setDataStatus(`Data file available: pricedataset.csv (latest data: ${latestDate})`);
-        } else {
-          setDataStatus('Data file available: pricedataset.csv');
-        }
-      } catch (err) {
-        setDataStatus('Error checking data file status');
-      }
-    };
-    checkDataFileStatus();
+    axios.get<ParamsResponse>('/api/mpt/params')
+      .then(r => { setData(r.data); setLoading(false); })
+      .catch(e => { setError(e?.message || 'load failed'); setLoading(false); });
   }, []);
 
-  // Update data status when refresh toggle changes
-  useEffect(() => {
-    if (refreshData) {
-      setDataStatus('Data will be refreshed from Yahoo Finance when running the model');
-      setIsRefreshing(true);
-    } else {
-      if (dataLatestDate) {
-        setDataStatus(`Using existing data from pricedataset.csv (latest data: ${dataLatestDate})`);
-      } else {
-        setDataStatus('Using existing data from pricedataset.csv');
-      }
-      setIsRefreshing(false);
-    }
-  }, [refreshData, dataLatestDate]);
+  const visibleUniverse = useMemo(() => {
+    if (!data) return [];
+    if (universeFilter === 'modeling') return data.universe.filter(r => r.in_modeling);
+    return data.universe;
+  }, [data, universeFilter]);
 
-  const handleSectorConstraintChange = (sector: string, type: 'min' | 'max', value: string) => {
-    setSectorConstraints(prev => ({
-      ...prev,
-      [sector]: {
-        ...prev[sector],
-        [type]: parseFloat(value)
-      }
-    }));
-  };
+  const sectorTotals = useMemo(() => {
+    if (!data) return { lower: 0, upper: 0 };
+    return data.sector_constraints.reduce(
+      (acc, r) => ({ lower: acc.lower + r.lower, upper: acc.upper + r.upper }),
+      { lower: 0, upper: 0 }
+    );
+  }, [data]);
 
-  const handleRunModeling = async () => {
-    try {
-      setModelingLoading(true);
-      setModelingError(null);
-      setModelingResult(null);
+  if (loading) return <div className="p-4 text-sm text-gray-600 dark:text-gray-400">Loading…</div>;
+  if (error)   return <div className="p-4 text-sm text-red-600">Error: {error}</div>;
+  if (!data || !data.params) return <div className="p-4 text-sm text-red-600">No params row found (migration 001 not applied?)</div>;
 
-      // Build request body conditionally
-      const requestBody: any = {
-        gamma: objective === 'max_sharpe' ? null : parseFloat(gamma),
-        targetRisk: parseFloat(targetRisk),
-        lowerBound: parseFloat(lowerBound),
-        upperBound: parseFloat(upperBound),
-        objective: objective,
-        refreshData: refreshData,
-        useSectorConstraints: useSectorConstraints,
-        sectorConstraints: useSectorConstraints ? sectorConstraints : null
-      };
-      if (objective !== 'efficient_risk') {
-        requestBody.targetReturn = parseFloat(targetReturn);
-      }
-
-      const response = await fetch('/api/run-mpt-modeling', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to initiate MPT modeling task');
-      }
-
-      const data = await response.json();
-      setTaskId(data.task_id);
-      // Start polling for status
-      pollTaskStatus(data.task_id);
-    } catch (err: any) {
-      setModelingError(err.message || 'Unknown error');
-      setModelingLoading(false);
-    }
-  };
-
-  const pollTaskStatus = async (taskId: string) => {
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/task-status/${taskId}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to check task status');
-        }
-
-        const statusData = await response.json();
-        if (statusData.status === 'completed') {
-          setModelingResult(statusData.result);
-          setModelingLoading(false);
-          clearInterval(interval);
-          
-          // If the data was refreshed, update the latest date
-          if (refreshData && statusData.result?.debug_info?.latest_date) {
-            setDataLatestDate(statusData.result.debug_info.latest_date);
-          }
-          
-          if (refreshData) {
-            if (dataLatestDate) {
-              setDataStatus(`Data refreshed from pricedataset.csv (latest data: ${dataLatestDate})`);
-            } else {
-              setDataStatus('Data refreshed from pricedataset.csv');
-            }
-          } else {
-            if (dataLatestDate) {
-              setDataStatus(`Data file used: pricedataset.csv (not refreshed, latest data: ${dataLatestDate})`);
-            } else {
-              setDataStatus('Data file used: pricedataset.csv (not refreshed)');
-            }
-          }
-        } else if (statusData.status === 'failed') {
-          setModelingError(statusData.error || 'Task failed');
-          setModelingLoading(false);
-          clearInterval(interval);
-        } else if (statusData.status === 'not_found') {
-          setModelingError('Task not found');
-          setModelingLoading(false);
-          clearInterval(interval);
-        }
-        // If still running, continue polling
-      } catch (err: any) {
-        setModelingError(err.message || 'Error checking task status');
-        setModelingLoading(false);
-        clearInterval(interval);
-      }
-    }, 2000); // Poll every 2 seconds
-  };
-
-  const handleSaveToRepository = async () => {
-    if (!taskId || !modelingResult) return;
-
-    try {
-      setSavingToRepo(true);
-      setSaveError(null);
-      setSaveSuccess(false);
-
-      const response = await fetch(`/api/save-to-repository/${taskId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({})  // Empty object since we removed name and description
-      });
-
-      const data: SaveToRepoResponse = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to save to repository');
-      }
-      
-      // Show success state on button
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 1500);
-      
-    } catch (err: any) {
-      setSaveError(err.message || 'Failed to save to repository');
-    } finally {
-      setSavingToRepo(false);
-    }
-  };
-
-  // Prepare data for the weights chart
-  const prepareWeightsChartData = (weights: { [key: string]: number }) => {
-    return Object.entries(weights)
-      .sort(([, a], [, b]) => b - a) // Sort by weight descending
-      .map(([ticker, weight]) => ({
-        ticker,
-        weight: +weight.toFixed(6) // Keep as decimal for chart, fix precision
-      }));
-  };
-
-  // Helper to get max weight as a decimal (not percent)
-  const getMaxWeight = (weights: { [key: string]: number }) => {
-    return Math.max(...Object.values(weights));
-  };
+  const p = data.params;
+  const inputCls = "w-full px-2 py-0.5 text-sm font-mono border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  const labelCls = "block text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-0.5";
+  const cardCls = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md";
+  const hdrCls = "px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300 flex items-center justify-between";
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <Helmet>
-        <title>MPT Modelling | MPM</title>
-      </Helmet>
-      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-200">Modern Portfolio Theory Modelling</h1>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-        <div className="bg-green-800 py-3 px-6">
-          <h2 className="text-lg font-semibold text-white">On-Demand MPT Modeling</h2>
+    <div className="p-4 space-y-3 text-gray-900 dark:text-gray-100">
+      <Helmet><title>MPT Model · Params</title></Helmet>
+
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-lg font-semibold">MPT Model Parameters</h1>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+          last updated {p.updated_at} by {p.updated_by || '—'}
+        </span>
+      </div>
+
+      {/* Optimizer scalars */}
+      <div className={cardCls}>
+        <div className={hdrCls}>
+          <span>Optimizer scalars (mpt_model_params)</span>
+          <span className="font-normal normal-case tracking-normal text-gray-500">single row</span>
         </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
-            {/* Row 1 */}
-            <div>
-              <label htmlFor="objective" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Optimization Objective
-              </label>
-              <select
-                id="objective"
-                value={objective}
-                onChange={(e) => setObjective(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="max_sharpe">Maximize Sharpe Ratio</option>
-                <option value="min_volatility">Minimize Volatility</option>
-                <option value="efficient_risk">Efficient Risk (Target Risk)</option>
-                <option value="efficient_return">Efficient Return (Target Return)</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="gamma" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Gamma (L2 Regularization)
-              </label>
-              <input
-                type="number"
-                id="gamma"
-                step="0.1"
-                value={gamma}
-                onChange={(e) => setGamma(e.target.value)}
-                disabled={objective === 'max_sharpe'}
-                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white ${objective === 'max_sharpe' ? 'opacity-50' : ''}`}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="targetReturn" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Target Return (Annual)
-              </label>
-              <input
-                type="number"
-                id="targetReturn"
-                step="0.01"
-                value={targetReturn}
-                onChange={(e) => setTargetReturn(e.target.value)}
-                disabled={objective !== 'efficient_return'}
-                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white ${objective !== 'efficient_return' ? 'opacity-50' : ''}`}
-              />
-            </div>
-
-            {/* Row 2 */}
-            <div>
-              <label htmlFor="lowerBound" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Lower Weight Bound
-              </label>
-              <input
-                type="number"
-                id="lowerBound"
-                step="0.00001"
-                value={lowerBound}
-                onChange={(e) => setLowerBound(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="upperBound" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Upper Weight Bound
-              </label>
-              <input
-                type="number"
-                id="upperBound"
-                step="0.00001"
-                value={upperBound}
-                onChange={(e) => setUpperBound(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="targetRisk" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Target Risk (Annual Volatility)
-              </label>
-              <input
-                type="number"
-                id="targetRisk"
-                step="0.01"
-                value={targetRisk}
-                onChange={(e) => setTargetRisk(e.target.value)}
-                disabled={objective !== 'efficient_risk'}
-                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white ${objective !== 'efficient_risk' ? 'opacity-50' : ''}`}
-              />
-            </div>
+        <div className="p-3 grid grid-cols-5 gap-3">
+          <div>
+            <label className={labelCls}>γ (L2 reg)</label>
+            <input type="number" step="0.0001" defaultValue={p.gamma} className={inputCls} readOnly />
           </div>
-          <div className="mb-4">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={refreshData}
-                onChange={(e) => setRefreshData(e.target.checked)}
-                className="form-checkbox h-5 w-5 text-green-600"
-              />
-              <span className="text-gray-700 dark:text-gray-300">Refresh Data from Yahoo Finance</span>
-            </label>
-            <div className="mt-2 flex items-center">
-              {isRefreshing && (
-                <div className="animate-pulse mr-2 h-2 w-2 rounded-full bg-green-500"></div>
-              )}
-              <span className={`text-sm ${isRefreshing ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                {dataStatus}
-              </span>
-            </div>
+          <div>
+            <label className={labelCls}>target risk (rgoal)</label>
+            <input type="number" step="0.0001" defaultValue={p.target_risk} className={inputCls} readOnly />
           </div>
-          <div className="mb-4">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={useSectorConstraints}
-                onChange={(e) => setUseSectorConstraints(e.target.checked)}
-                className="mr-2"
-              />
-              <span className="text-gray-700 dark:text-gray-300">Use Sector Constraints</span>
-            </label>
+          <div>
+            <label className={labelCls}>weight lower (lb)</label>
+            <input type="number" step="0.00001" defaultValue={p.weight_lower} className={inputCls} readOnly />
           </div>
-          {useSectorConstraints && (
-            <div className="mb-6 border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
+          <div>
+            <label className={labelCls}>weight upper (ub)</label>
+            <input type="number" step="0.0001" defaultValue={p.weight_upper} className={inputCls} readOnly />
+          </div>
+          <div>
+            <label className={labelCls}>γ smooth (L2_with_smoothing)</label>
+            <input type="number" step="0.01" defaultValue={p.gamma_smooth} className={inputCls} readOnly />
+          </div>
+        </div>
+        {p.notes && (
+          <div className="px-3 pb-2 text-[11px] text-gray-500 dark:text-gray-400">{p.notes}</div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* Sector constraints */}
+        <div className={cardCls}>
+          <div className={hdrCls}>
+            <span>Sector constraints ({data.sector_constraints.length} sectors)</span>
+            <span className="font-normal normal-case tracking-normal text-gray-500">
+              Σ lower {fmtPct(sectorTotals.lower)} · Σ upper {fmtPct(sectorTotals.upper)}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 dark:bg-gray-800 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <tr>
+                  <th className="px-2 py-1 text-left font-semibold">Sector</th>
+                  <th className="px-2 py-1 text-right font-semibold">Lower</th>
+                  <th className="px-2 py-1 text-right font-semibold">Upper</th>
+                  <th className="px-2 py-1 text-right font-semibold">Range</th>
+                  <th className="px-2 py-1 text-right font-semibold">Mid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.sector_constraints.map(s => (
+                  <tr key={s.sector} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                    <td className="px-2 py-1 font-medium">{s.sector}</td>
+                    <td className="px-2 py-1 text-right font-mono">
+                      <input type="number" step="0.000001" defaultValue={fmt6(s.lower)} readOnly
+                        className="w-28 px-1 py-0 text-right font-mono bg-transparent border border-transparent hover:border-gray-300 dark:hover:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"/>
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono">
+                      <input type="number" step="0.000001" defaultValue={fmt6(s.upper)} readOnly
+                        className="w-28 px-1 py-0 text-right font-mono bg-transparent border border-transparent hover:border-gray-300 dark:hover:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"/>
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-gray-500">
+                      {fmt6(s.upper - s.lower)}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-gray-500">
+                      {fmt6((s.upper + s.lower) / 2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Universe */}
+        <div className={cardCls}>
+          <div className={hdrCls}>
+            <span>Universe ({data.universe.filter(r => r.in_modeling).length} modeling / {data.universe.length} total)</span>
+            <div className="flex items-center gap-1 font-normal normal-case tracking-normal">
               <button
-                onClick={() => setIsSectorConstraintsExpanded(!isSectorConstraintsExpanded)}
-                className="w-full bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors duration-200"
-              >
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Sector Constraints</h4>
-                <svg
-                  className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${isSectorConstraintsExpanded ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                onClick={() => setUniverseFilter('modeling')}
+                className={`px-2 py-0.5 text-[11px] rounded ${universeFilter === 'modeling' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
+                Modeling
               </button>
-              <div
-                className={`transition-all duration-300 ease-in-out ${
-                  isSectorConstraintsExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-                }`}
-              >
-                <div className="p-4">
-                  {/* Real-time sum of min values */}
-                  <div className="mb-2 text-right">
-                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Sum of Min values: </span>
-                    <span className="text-base font-bold text-green-700 dark:text-green-400">
-                      {Object.values(sectorConstraints).reduce((acc, { min }) => acc + (Number(min) || 0), 0).toFixed(4)}
-                    </span>
-                    <br />
-                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Bonds (FBonds + DBonds) Min Sum: </span>
-                    <span className="text-base font-bold text-blue-700 dark:text-blue-400">
-                      {((Number(sectorConstraints['FBonds']?.min || 0) + Number(sectorConstraints['DBonds']?.min || 0)).toFixed(4))}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    {Object.entries(sectorConstraints).map(([sector, { min, max }]) => (
-                      <div key={sector} className="p-2 bg-white dark:bg-gray-600 rounded border border-gray-300 dark:border-gray-700">
-                        <div className="font-medium text-gray-900 dark:text-gray-100 mb-2">{sector}</div>
-                        <div className="flex justify-between items-center mt-1">
-                          <label className="text-base text-gray-700 dark:text-gray-300 flex flex-col items-start">
-                            <span className="mb-1">Min:</span>
-                            <div className="flex items-center space-x-1">
-                              <button
-                                type="button"
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-700 hover:bg-gray-800 text-white text-lg focus:outline-none border border-gray-500"
-                                onClick={() => handleSectorConstraintChange(sector, 'min', (min - 0.0001).toFixed(5))}
-                                tabIndex={-1}
-                              >
-                                &minus;
-                              </button>
-                              <input
-                                type="number"
-                                step="0.0001"
-                                value={min}
-                                onChange={(e) => handleSectorConstraintChange(sector, 'min', e.target.value)}
-                                className="w-20 px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-base dark:bg-gray-700 dark:text-white appearance-none"
-                                style={{ MozAppearance: 'textfield' }}
-                              />
-                              <button
-                                type="button"
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-green-600 hover:bg-green-700 text-white text-lg focus:outline-none border border-green-700"
-                                onClick={() => handleSectorConstraintChange(sector, 'min', (min + 0.0001).toFixed(5))}
-                                tabIndex={-1}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </label>
-                          <label className="text-base text-gray-700 dark:text-gray-300 flex flex-col items-start">
-                            <span className="mb-1">Max:</span>
-                            <div className="flex items-center space-x-1">
-                              <button
-                                type="button"
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-700 hover:bg-gray-800 text-white text-lg focus:outline-none border border-gray-500"
-                                onClick={() => handleSectorConstraintChange(sector, 'max', (max - 0.0001).toFixed(5))}
-                                tabIndex={-1}
-                              >
-                                &minus;
-                              </button>
-                              <input
-                                type="number"
-                                step="0.0001"
-                                value={max}
-                                onChange={(e) => handleSectorConstraintChange(sector, 'max', e.target.value)}
-                                className="w-20 px-1 py-1 border border-gray-300 dark:border-gray-600 rounded text-base dark:bg-gray-700 dark:text-white appearance-none"
-                                style={{ MozAppearance: 'textfield' }}
-                              />
-                              <button
-                                type="button"
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-green-600 hover:bg-green-700 text-white text-lg focus:outline-none border border-green-700"
-                                onClick={() => handleSectorConstraintChange(sector, 'max', (max + 0.0001).toFixed(5))}
-                                tabIndex={-1}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </label>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <button
+                onClick={() => setUniverseFilter('all')}
+                className={`px-2 py-0.5 text-[11px] rounded ${universeFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
+                All
+              </button>
             </div>
-          )}
-          <button
-            onClick={handleRunModeling}
-            disabled={modelingLoading}
-            className="px-4 py-2 bg-green-800 hover:bg-green-700 text-white rounded-md shadow-sm transition-colors duration-200 flex items-center"
-          >
-            {modelingLoading ? (
-              <span>Running...</span>
-            ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
-                </svg>
-                Run MPT Modeling
-              </>
-            )}
-          </button>
-
-          {modelingError && (
-            <div className="mt-4 text-red-500">{modelingError}</div>
-          )}
-
-          {modelingResult && (
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Modeling Results</h3>
-              
-              {/* Performance Metrics */}
-              <div className="mb-3">
-                <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Performance Metrics:</h5>
-                <div className="pl-4 grid grid-cols-3 gap-4">
-                  <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Optimization Method</div>
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {(() => {
-                        switch(objective) {
-                          case 'max_sharpe':
-                            return 'Maximum Sharpe';
-                          case 'min_volatility':
-                            return 'Minimum Volatility';
-                          case 'efficient_risk':
-                            return 'Efficient Risk';
-                          case 'efficient_return':
-                            return 'Efficient Return';
-                          default:
-                            return objective;
-                        }
-                      })()}
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Expected Return</div>
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {(modelingResult.expected_return * 100).toFixed(4)}%
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Volatility</div>
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {(modelingResult.volatility * 100).toFixed(4)}%
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Sharpe Ratio</div>
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {modelingResult.sharpe_ratio.toFixed(3)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Debug Information Section */}
-              {modelingResult.debug_info && (
-                <div className="mb-4 border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
-                  <button
-                    onClick={() => setIsDebugExpanded(!isDebugExpanded)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors duration-200"
-                  >
-                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Debug Information</h4>
-                    <svg
-                      className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${isDebugExpanded ? 'rotate-180' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  <div
-                    className={`transition-all duration-300 ease-in-out ${
-                      isDebugExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-                    }`}
-                  >
-                    <div className="p-4 space-y-4">
-                      {/* Config Files Section */}
-                      <div className="mb-3">
-                        <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Configuration Files:</h5>
-                        <div className="pl-4 space-y-1">
-                          <div className="flex items-center">
-                            <div className={`w-2 h-2 rounded-full mr-2 ${
-                              modelingResult.debug_info.config_files.status === 'success' 
-                                ? 'bg-green-500' 
-                                : modelingResult.debug_info.config_files.status === 'error'
-                                ? 'bg-red-500'
-                                : 'bg-yellow-500'
-                            }`} />
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                              Status: {modelingResult.debug_info.config_files.status}
-                            </span>
-                          </div>
-                          {modelingResult.debug_info.config_files.message && (
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              {modelingResult.debug_info.config_files.message}
-                            </div>
-                          )}
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Data source: {modelingResult.debug_info.config_files.data_source || 'static files'}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Tickers loaded: {modelingResult.debug_info.config_files.tickers_count}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Sector mappings: {modelingResult.debug_info.config_files.sectors_count}
-                          </div>
-                          {modelingResult.debug_info.config_files.query_info && (
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              Database query: {modelingResult.debug_info.config_files.query_info.symbols_with_allocation} symbols with allocation, {modelingResult.debug_info.config_files.query_info.sectors_mapped} sectors mapped
-                            </div>
-                          )}
-                          {modelingResult.debug_info.config_files.fbonds_dbonds_overrides && (
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              FBonds/DBonds overrides: {Object.keys(modelingResult.debug_info.config_files.fbonds_dbonds_overrides).length} symbols updated from text file
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Optimization Section */}
-                      <div className="mb-3">
-                        <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Optimization Process:</h5>
-                        <div className="pl-4 space-y-1">
-                          <div className="flex items-center">
-                            <div className={`w-2 h-2 rounded-full mr-2 ${
-                              modelingResult.debug_info.optimization.status === 'success' 
-                                ? 'bg-green-500' 
-                                : modelingResult.debug_info.optimization.status === 'error'
-                                ? 'bg-red-500'
-                                : 'bg-yellow-500'
-                            }`} />
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                              Status: {modelingResult.debug_info.optimization.status}
-                            </span>
-                          </div>
-                          {modelingResult.debug_info.optimization.solver_status && (
-                            <div className={`text-sm ${
-                              modelingResult.debug_info.optimization.solver_status === 'optimal'
-                                ? 'text-green-600 dark:text-green-400'
-                                : 'text-red-500'
-                            }`}>
-                              Solver status: {modelingResult.debug_info.optimization.solver_status}
-                            </div>
-                          )}
-                          {modelingResult.debug_info.optimization.message && (
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              {modelingResult.debug_info.optimization.message}
-                            </div>
-                          )}
-                          {modelingResult.debug_info.optimization.data_shape && (
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              {modelingResult.debug_info.optimization.data_shape}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Applied Parameters Section */}
-                      <div className="mb-3">
-                        <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Applied Parameters:</h5>
-                        <div className="pl-4 space-y-1">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              Gamma: {modelingResult.debug_info.optimization.constraints.gamma}
-                            </div>
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              Target Return: {modelingResult.debug_info.optimization.constraints.target_return}
-                            </div>
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              Weight Bounds: [{modelingResult.debug_info.optimization.constraints.lower_bound}, {modelingResult.debug_info.optimization.constraints.upper_bound}]
-                            </div>
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              Refresh Data: {modelingResult.debug_info.optimization.constraints.refresh_data ? 'Yes' : 'No'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Optimized Weights */}
-              <div className="mb-3">
-                <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Optimized Portfolio Weights:</h5>
-                
-                {/* Add the bar chart */}
-                <div className="mb-4 h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={prepareWeightsChartData(modelingResult.weights)}
-                      margin={{ top: 30, right: 40, left: 30, bottom: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                      <XAxis
-                        dataKey="ticker"
-                        angle={-45}
-                        textAnchor="end"
-                        height={56}
-                        interval={0}
-                        tick={{ fill: '#fff', fontSize: 13, fontWeight: 600 }}
-                      />
-                      <YAxis
-                        domain={[0, getMaxWeight(modelingResult.weights) * 1.1]}
-                        tickFormatter={(value) => `${(value * 100).toFixed(2)}%`}
-                        tick={{ fill: '#fff', fontSize: 13, fontWeight: 600 }}
-                      />
-                      <Tooltip
-                        formatter={(value: number) => [`${value.toFixed(4)}%`, 'Weight']}
-                        contentStyle={{
-                          backgroundColor: 'rgb(31, 41, 55)',
-                          border: 'none',
-                          borderRadius: '0.375rem',
-                          color: 'white'
-                        }}
-                        labelStyle={{ color: '#fff', fontWeight: 700 }}
-                        itemStyle={{ color: '#fff' }}
-                      />
-                      <Bar
-                        dataKey="weight"
-                        fill="rgba(16, 185, 129, 0.7)"
-                        radius={[4, 4, 0, 0]}
-                        barSize={18}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Existing weights grid */}
-                <div className="pl-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {Object.entries(modelingResult.weights)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([ticker, weight]) => (
-                        <div key={ticker} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700 p-2 rounded">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{ticker}</span>
-                          <span className="text-sm text-gray-600 dark:text-gray-400">{(weight * 100).toFixed(4)}%</span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Sector Weights - Only show if sector constraints were used */}
-              {useSectorConstraints && modelingResult.sector_weights && (
-                <div className="mb-3">
-                  <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sector Allocations:</h5>
-                  <div className="pl-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {Object.entries(modelingResult.sector_weights)
-                        .sort(([, a], [, b]) => b - a) // Sort by weight descending
-                        .map(([sector, weight]) => (
-                          <div key={sector} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700 p-2 rounded">
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{sector}</span>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">{(weight * 100).toFixed(4)}%</span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Add Repository Save Section at the end */}
-              <div className="mt-6 flex items-center justify-end space-x-4 border-t border-gray-200 dark:border-gray-700 pt-4">
-                {saveError && (
-                  <span className="text-sm text-red-500">{saveError}</span>
-                )}
-                <button
-                  onClick={handleSaveToRepository}
-                  disabled={savingToRepo}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md shadow-sm transition-colors duration-200 flex items-center disabled:opacity-50"
-                >
-                  {savingToRepo ? (
-                    <span>Saving...</span>
-                  ) : saveSuccess ? (
-                    <span>Saved!</span>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
-                      </svg>
-                      Save to Repository
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: '480px' }}>
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <tr>
+                  <th className="px-2 py-1 text-left font-semibold">Symbol</th>
+                  <th className="px-2 py-1 text-left font-semibold">Sector</th>
+                  <th className="px-2 py-1 text-center font-semibold">Modeling</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleUniverse.map(u => (
+                  <tr key={u.symbol} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                    <td className="px-2 py-0.5 font-mono font-medium">{u.symbol}</td>
+                    <td className="px-2 py-0.5 text-gray-600 dark:text-gray-400">{u.sector}</td>
+                    <td className="px-2 py-0.5 text-center">
+                      <input type="checkbox" defaultChecked={u.in_modeling} disabled className="cursor-not-allowed opacity-70"/>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
+      </div>
+
+      <div className="text-[11px] text-gray-500 dark:text-gray-400 italic">
+        Read-only preview. Edit/save and "Run Now" wiring next.
       </div>
     </div>
   );
 };
 
-export default MPTModelling; 
+export default MPTModelling;

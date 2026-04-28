@@ -351,3 +351,55 @@ def get_mpt_results_gamma_scatter(days: int = 365, db: Session = Depends(get_db)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT results gamma scatter data: {str(e)}")
+
+@router.get("/mpt/params")
+def get_mpt_params(db: Session = Depends(get_db)):
+    """Return the active MPT model config from the three config tables.
+
+    Shape:
+        {
+            "params": { gamma, target_risk, weight_lower, weight_upper,
+                        gamma_smooth, updated_at, updated_by, notes },
+            "sector_constraints": [{ sector, lower, upper, updated_at }, ...],
+            "universe": [{ symbol, sector, in_modeling, notes, updated_at }, ...]
+        }
+    """
+    try:
+        params_row = db.execute(text("""
+            SELECT gamma, target_risk, weight_lower, weight_upper,
+                   gamma_smooth, updated_at, updated_by, notes
+            FROM mpt_model_params WHERE id = 1
+        """)).fetchone()
+        params = None
+        if params_row:
+            params = {
+                "gamma":        params_row[0],
+                "target_risk":  params_row[1],
+                "weight_lower": params_row[2],
+                "weight_upper": params_row[3],
+                "gamma_smooth": params_row[4],
+                "updated_at":   params_row[5],
+                "updated_by":   params_row[6],
+                "notes":        params_row[7],
+            }
+
+        sectors = [
+            {"sector": r[0], "lower": r[1], "upper": r[2], "updated_at": r[3]}
+            for r in db.execute(text(
+                "SELECT sector, lower, upper, updated_at "
+                "FROM mpt_sector_constraints ORDER BY sector"
+            )).fetchall()
+        ]
+
+        universe = [
+            {"symbol": r[0], "sector": r[1], "in_modeling": bool(r[2]),
+             "notes": r[3], "updated_at": r[4]}
+            for r in db.execute(text(
+                "SELECT symbol, sector, in_modeling, notes, updated_at "
+                "FROM mpt_universe ORDER BY in_modeling DESC, symbol"
+            )).fetchall()
+        ]
+
+        return {"params": params, "sector_constraints": sectors, "universe": universe}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load MPT params: {str(e)}")
