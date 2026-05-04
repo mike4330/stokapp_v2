@@ -29,6 +29,22 @@ interface MPTGammaScatterData {
   timestamp: string;
 }
 
+interface ValidationRow {
+  run_date: string;
+  forward_date: string;
+  predicted_pct: number | null;
+  held_through_pct: number | null;
+  as_traded_pct: number | null;
+  trading_delta: number | null;
+  n_held: number;
+  n_sold: number;
+}
+
+interface ValidationResponse {
+  horizon_days: number;
+  rows: ValidationRow[];
+}
+
 interface PerformanceData {
   // Define your performance data structure here
   // This will depend on what backend API you create
@@ -39,7 +55,7 @@ const ModelPerformance: React.FC = () => {
   // Each row defines: cols (number of columns) and cards (array of card identifiers)
   const gridLayout = [
     { cols: 2, cards: ['expected-return-time', 'expected-return-lower-bound-contour'] },
-    { cols: 2, cards: ['gamma-expected-return-contour', 'chart4'] },
+    { cols: 2, cards: ['gamma-expected-return-contour', 'validation-table'] },
   ];
 
   const [loading, setLoading] = useState(true);
@@ -48,6 +64,9 @@ const ModelPerformance: React.FC = () => {
   const [timeSeriesData, setTimeSeriesData] = useState<MPTResultData[]>([]);
   const [scatterData, setScatterData] = useState<MPTScatterData[]>([]);
   const [gammaScatterData, setGammaScatterData] = useState<MPTGammaScatterData[]>([]);
+  const [validationData, setValidationData] = useState<ValidationResponse | null>(null);
+  const [validationLoading, setValidationLoading] = useState(true);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('1Y');
 
   // Fetch MPT results data
@@ -113,6 +132,24 @@ const ModelPerformance: React.FC = () => {
 
     fetchData();
   }, [timeFrame]);
+
+  // Validation table is independent of timeFrame (always 1y forward horizon, 6 evenly-spaced run dates)
+  useEffect(() => {
+    const fetchValidation = async () => {
+      setValidationLoading(true);
+      setValidationError(null);
+      try {
+        const r = await fetch('/api/mpt-results/validation?horizon_days=365&n_periods=6');
+        if (!r.ok) throw new Error('Failed to fetch validation data');
+        setValidationData(await r.json());
+      } catch (err) {
+        setValidationError(err instanceof Error ? err.message : 'Failed to load validation');
+      } finally {
+        setValidationLoading(false);
+      }
+    };
+    fetchValidation();
+  }, []);
 
   // Render individual card based on cardId
   const renderCard = (cardId: string) => {
@@ -321,17 +358,102 @@ const ModelPerformance: React.FC = () => {
           </div>
         );
 
-      case 'chart4':
+      case 'validation-table': {
+        const fmtPct = (v: number | null) =>
+          v === null || v === undefined ? '—' : `${v.toFixed(2)}%`;
+        const surpriseColor = (predicted: number | null, realized: number | null) => {
+          if (predicted === null || realized === null) return '';
+          const diff = realized - predicted;
+          if (Math.abs(diff) < 2) return 'text-gray-600 dark:text-gray-300';
+          return diff > 0
+            ? 'text-emerald-600 dark:text-emerald-400'
+            : 'text-rose-600 dark:text-rose-400';
+        };
+        const deltaColor = (delta: number | null) => {
+          if (delta === null || delta === undefined) return '';
+          if (Math.abs(delta) < 1) return 'text-gray-600 dark:text-gray-300';
+          return delta > 0
+            ? 'text-emerald-600 dark:text-emerald-400'
+            : 'text-rose-600 dark:text-rose-400';
+        };
         return (
           <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 shadow">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Chart 4
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
+              Predicted vs Realized (1y horizon)
             </h3>
-            <div className="h-80 flex items-center justify-center text-gray-500 dark:text-gray-400">
-              Placeholder
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              <span className="font-medium">Held-through</span> = survivor cohort, renormalized (cleanest read on model quality).{' '}
+              <span className="font-medium">As-traded</span> = full t0 basket, sold positions exit at last observed price.{' '}
+              Gap reflects relative cohort performance, not pure trading alpha (sale proceeds aren't reinvested here).
+            </p>
+            <div className="h-80 overflow-auto">
+              {validationLoading && (
+                <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+                  Loading validation…
+                </div>
+              )}
+              {validationError && (
+                <div className="text-rose-600 dark:text-rose-400 p-2 text-sm">{validationError}</div>
+              )}
+              {!validationLoading && !validationError && validationData && (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900">
+                    <tr className="text-left text-gray-700 dark:text-gray-300 border-b border-gray-300 dark:border-gray-700">
+                      <th className="py-2 pr-2 font-medium">Run date</th>
+                      <th className="py-2 px-2 font-medium text-right">Predicted</th>
+                      <th className="py-2 px-2 font-medium text-right">Held-through</th>
+                      <th className="py-2 px-2 font-medium text-right">As-traded</th>
+                      <th className="py-2 px-2 font-medium text-right">Δ trade</th>
+                      <th className="py-2 pl-2 font-medium text-right">Held / Sold</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {validationData.rows.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-gray-500 dark:text-gray-400">
+                          No runs old enough for 1y forward window yet.
+                        </td>
+                      </tr>
+                    )}
+                    {validationData.rows.map((row) => (
+                      <tr
+                        key={row.run_date}
+                        className="border-b border-gray-200 dark:border-gray-800"
+                      >
+                        <td className="py-2 pr-2 font-mono text-gray-800 dark:text-gray-200">
+                          {row.run_date}
+                        </td>
+                        <td className="py-2 px-2 text-right text-gray-800 dark:text-gray-200">
+                          {fmtPct(row.predicted_pct)}
+                        </td>
+                        <td
+                          className={`py-2 px-2 text-right font-medium ${surpriseColor(
+                            row.predicted_pct,
+                            row.held_through_pct
+                          )}`}
+                        >
+                          {fmtPct(row.held_through_pct)}
+                        </td>
+                        <td className="py-2 px-2 text-right text-gray-800 dark:text-gray-200">
+                          {fmtPct(row.as_traded_pct)}
+                        </td>
+                        <td className={`py-2 px-2 text-right font-medium ${deltaColor(row.trading_delta)}`}>
+                          {row.trading_delta === null
+                            ? '—'
+                            : `${row.trading_delta > 0 ? '+' : ''}${row.trading_delta.toFixed(2)}`}
+                        </td>
+                        <td className="py-2 pl-2 text-right text-gray-600 dark:text-gray-400 tabular-nums">
+                          {row.n_held} / {row.n_sold}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         );
+      }
 
       default:
         return null;

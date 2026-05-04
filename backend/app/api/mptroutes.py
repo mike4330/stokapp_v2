@@ -352,6 +352,136 @@ def get_mpt_results_gamma_scatter(days: int = 365, db: Session = Depends(get_db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve MPT results gamma scatter data: {str(e)}")
 
+@router.get("/mpt-results/validation")
+def get_mpt_validation(
+    horizon_days: int = 365,
+    n_periods: int = 6,
+    db: Session = Depends(get_db),
+):
+    """Predicted vs realized return for past MPT runs.
+
+    For each of `n_periods` evenly-spaced historical run dates that have
+    `horizon_days` of forward data available, compute two realized-return
+    flavors against the model's predicted return:
+
+    - held_through_pct: only symbols still in `weights` at t1 (renormalized).
+                        Cleanest read on model quality.
+    - as_traded_pct:    every symbol in t0 weights. Sold symbols exit at last
+                        observed price (the day they dropped from `weights`).
+
+    The gap between the two reflects the relative performance of the sold
+    cohort vs the held cohort, not pure trading alpha — sale proceeds aren't
+    reinvested in this calc.
+    """
+    try:
+        from datetime import date, timedelta
+
+        today = date.today()
+        cutoff = (today - timedelta(days=horizon_days)).isoformat()
+
+        candidate_rows = db.execute(text("""
+            SELECT DISTINCT date(m.timestamp) AS d
+            FROM mpt_results m
+            WHERE date(m.timestamp) <= :cutoff
+              AND EXISTS (
+                  SELECT 1 FROM weights w WHERE w.timestamp = date(m.timestamp)
+              )
+            ORDER BY d
+        """), {"cutoff": cutoff}).fetchall()
+
+        candidate_dates = [r[0] for r in candidate_rows]
+        if not candidate_dates:
+            return {"horizon_days": horizon_days, "rows": []}
+
+        if len(candidate_dates) <= n_periods:
+            selected = candidate_dates
+        else:
+            step = (len(candidate_dates) - 1) / (n_periods - 1)
+            selected = [candidate_dates[round(i * step)] for i in range(n_periods)]
+            seen = set()
+            selected = [d for d in selected if not (d in seen or seen.add(d))]
+
+        rows = []
+        for t0 in selected:
+            t1 = (date.fromisoformat(t0) + timedelta(days=horizon_days)).isoformat()
+
+            agg = db.execute(text("""
+                WITH basket AS (
+                  SELECT w.symbol, w.weight,
+                    (SELECT close FROM security_values
+                       WHERE symbol = w.symbol AND timestamp <= :t0
+                       ORDER BY timestamp DESC LIMIT 1) AS p0,
+                    (SELECT MAX(timestamp) FROM security_values
+                       WHERE symbol = w.symbol) AS last_seen
+                  FROM weights w WHERE w.timestamp = :t0
+                ),
+                priced AS (
+                  SELECT b.symbol, b.weight, b.p0,
+                    (SELECT close FROM security_values
+                       WHERE symbol = b.symbol
+                         AND timestamp <= CASE
+                             WHEN b.last_seen IS NULL THEN :t1
+                             WHEN b.last_seen < :t1 THEN b.last_seen
+                             ELSE :t1
+                         END
+                       ORDER BY timestamp DESC LIMIT 1) AS p_exit,
+                    CASE WHEN b.last_seen IS NULL OR b.last_seen < :t1
+                         THEN 'sold' ELSE 'held' END AS status
+                  FROM basket b
+                )
+                SELECT
+                  SUM(CASE WHEN status='held' THEN 1 ELSE 0 END) AS n_held,
+                  SUM(CASE WHEN status='sold' THEN 1 ELSE 0 END) AS n_sold,
+                  CASE
+                    WHEN SUM(CASE WHEN status='held' AND p0 IS NOT NULL AND p_exit IS NOT NULL
+                                  THEN weight END) IS NULL THEN NULL
+                    ELSE
+                      SUM(CASE WHEN status='held' AND p0 IS NOT NULL AND p_exit IS NOT NULL
+                               THEN weight * (p_exit*1.0/p0 - 1) END)
+                      / SUM(CASE WHEN status='held' AND p0 IS NOT NULL AND p_exit IS NOT NULL
+                                 THEN weight END)
+                      * 100.0
+                  END AS held_through_pct,
+                  CASE
+                    WHEN SUM(CASE WHEN p0 IS NOT NULL AND p_exit IS NOT NULL
+                                  THEN weight END) IS NULL THEN NULL
+                    ELSE
+                      SUM(CASE WHEN p0 IS NOT NULL AND p_exit IS NOT NULL
+                               THEN weight * (p_exit*1.0/p0 - 1) END)
+                      / SUM(CASE WHEN p0 IS NOT NULL AND p_exit IS NOT NULL
+                                 THEN weight END)
+                      * 100.0
+                  END AS as_traded_pct
+                FROM priced
+            """), {"t0": t0, "t1": t1}).fetchone()
+
+            pred = db.execute(text("""
+                SELECT AVG(expected_return) * 100.0
+                FROM mpt_results
+                WHERE date(timestamp) = :t0
+            """), {"t0": t0}).fetchone()
+
+            held = round(agg[2], 2) if agg and agg[2] is not None else None
+            traded = round(agg[3], 2) if agg and agg[3] is not None else None
+            delta = round(traded - held, 2) if held is not None and traded is not None else None
+            predicted = round(pred[0], 2) if pred and pred[0] is not None else None
+
+            rows.append({
+                "run_date": t0,
+                "forward_date": t1,
+                "predicted_pct": predicted,
+                "held_through_pct": held,
+                "as_traded_pct": traded,
+                "trading_delta": delta,
+                "n_held": int(agg[0] or 0) if agg else 0,
+                "n_sold": int(agg[1] or 0) if agg else 0,
+            })
+
+        return {"horizon_days": horizon_days, "rows": rows}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to compute MPT validation: {str(e)}")
+
+
 @router.get("/mpt/params")
 def get_mpt_params(db: Session = Depends(get_db)):
     """Return the active MPT model config from the three config tables.
