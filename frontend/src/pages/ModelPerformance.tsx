@@ -38,12 +38,47 @@ interface ValidationRow {
   trading_delta: number | null;
   n_held: number;
   n_sold: number;
+  is_keystone: boolean;
+  regime_run_count: number | null;
+  regime_signature: string | null;
 }
 
 interface ValidationResponse {
   horizon_days: number;
   rows: ValidationRow[];
 }
+
+// Shared chart palette — matches the Recharts stroke/grid tokens used below.
+const CHART_AXIS_COLOR = '#9CA3AF'; // gray-400
+const CHART_GRID_COLOR = '#374151'; // gray-700
+const CHART_TICK_FONT_SIZE = 11;
+const CHART_TOOLTIP_BG = 'rgba(17, 24, 39, 0.9)';
+const CHART_TOOLTIP_BORDER = '#374151';
+const CHART_TOOLTIP_TEXT = '#F3F4F6';
+
+const plotlyAxis = (title: string, tickformat: string) => ({
+  title: { text: title, font: { color: CHART_AXIS_COLOR, size: 12 } },
+  gridcolor: CHART_GRID_COLOR,
+  linecolor: CHART_GRID_COLOR,
+  zerolinecolor: CHART_GRID_COLOR,
+  tickcolor: CHART_AXIS_COLOR,
+  tickfont: { color: CHART_AXIS_COLOR, size: CHART_TICK_FONT_SIZE },
+  tickformat,
+});
+
+const plotlyLayoutBase = {
+  autosize: true,
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: CHART_AXIS_COLOR, size: CHART_TICK_FONT_SIZE },
+  margin: { t: 20, r: 20, b: 50, l: 60 },
+  hovermode: 'closest' as const,
+  hoverlabel: {
+    bgcolor: CHART_TOOLTIP_BG,
+    bordercolor: CHART_TOOLTIP_BORDER,
+    font: { color: CHART_TOOLTIP_TEXT },
+  },
+};
 
 interface PerformanceData {
   // Define your performance data structure here
@@ -139,7 +174,7 @@ const ModelPerformance: React.FC = () => {
       setValidationLoading(true);
       setValidationError(null);
       try {
-        const r = await fetch('/api/mpt-results/validation?horizon_days=365&n_periods=6');
+        const r = await fetch('/api/mpt-results/validation?horizon_days=365&n_periods=8&n_keystones=3');
         if (!r.ok) throw new Error('Failed to fetch validation data');
         setValidationData(await r.json());
       } catch (err) {
@@ -172,29 +207,29 @@ const ModelPerformance: React.FC = () => {
                   data={timeSeriesData}
                   margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_COLOR} />
                   <XAxis
                     dataKey="timestamp"
                     tickFormatter={(timestamp) => {
                       const date = new Date(timestamp);
                       return date.toLocaleDateString();
                     }}
-                    stroke="#9CA3AF"
-                    tick={{ fontSize: 11 }}
+                    stroke={CHART_AXIS_COLOR}
+                    tick={{ fontSize: CHART_TICK_FONT_SIZE }}
                   />
                   <YAxis
                     domain={['auto', 'auto']}
                     tickFormatter={(value) => `${(value * 100).toFixed(1)}%`}
-                    stroke="#9CA3AF"
-                    tick={{ fontSize: 11 }}
+                    stroke={CHART_AXIS_COLOR}
+                    tick={{ fontSize: CHART_TICK_FONT_SIZE }}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                      border: '1px solid #374151',
+                      backgroundColor: CHART_TOOLTIP_BG,
+                      border: `1px solid ${CHART_TOOLTIP_BORDER}`,
                       borderRadius: '0.375rem',
                     }}
-                    labelStyle={{ color: '#F3F4F6' }}
+                    labelStyle={{ color: CHART_TOOLTIP_TEXT }}
                     formatter={(value: number) => [`${(value * 100).toFixed(2)}%`, 'Expected Return']}
                     labelFormatter={(timestamp) => {
                       const date = new Date(timestamp);
@@ -255,21 +290,9 @@ const ModelPerformance: React.FC = () => {
                     }
                   ]}
                   layout={{
-                    autosize: true,
-                    paper_bgcolor: 'rgba(0,0,0,0)',
-                    plot_bgcolor: 'rgba(0,0,0,0)',
-                    xaxis: {
-                      title: 'Lower Bound (%)',
-                      gridcolor: '#374151',
-                      tickformat: '.4f',
-                    },
-                    yaxis: {
-                      title: 'Expected Return (%)',
-                      gridcolor: '#374151',
-                      tickformat: '.2f',
-                    },
-                    margin: { t: 20, r: 20, b: 50, l: 60 },
-                    hovermode: 'closest',
+                    ...plotlyLayoutBase,
+                    xaxis: plotlyAxis('Lower Bound (%)', '.4f'),
+                    yaxis: plotlyAxis('Expected Return (%)', '.2f'),
                   }}
                   config={{
                     displayModeBar: false,
@@ -327,21 +350,9 @@ const ModelPerformance: React.FC = () => {
                     }
                   ]}
                   layout={{
-                    autosize: true,
-                    paper_bgcolor: 'rgba(0,0,0,0)',
-                    plot_bgcolor: 'rgba(0,0,0,0)',
-                    xaxis: {
-                      title: 'Gamma',
-                      gridcolor: '#374151',
-                      tickformat: '.2f',
-                    },
-                    yaxis: {
-                      title: 'Expected Return (%)',
-                      gridcolor: '#374151',
-                      tickformat: '.2f',
-                    },
-                    margin: { t: 20, r: 20, b: 50, l: 60 },
-                    hovermode: 'closest',
+                    ...plotlyLayoutBase,
+                    xaxis: plotlyAxis('Gamma', '.2f'),
+                    yaxis: plotlyAxis('Expected Return (%)', '.2f'),
                   }}
                   config={{
                     displayModeBar: false,
@@ -384,7 +395,9 @@ const ModelPerformance: React.FC = () => {
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
               <span className="font-medium">Held-through</span> = survivor cohort, renormalized (cleanest read on model quality).{' '}
               <span className="font-medium">As-traded</span> = full t0 basket, sold positions exit at last observed price.{' '}
-              Gap reflects relative cohort performance, not pure trading alpha (sale proceeds aren't reinvested here).
+              Rows marked{' '}
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-amber-500 text-white text-[10px] font-bold align-middle">K</span>{' '}
+              are anchored to keystone regimes (param clusters with many runs); others are evenly-spaced fills.
             </p>
             <div className="h-80 overflow-auto">
               {validationLoading && (
@@ -418,9 +431,25 @@ const ModelPerformance: React.FC = () => {
                     {validationData.rows.map((row) => (
                       <tr
                         key={row.run_date}
-                        className="border-b border-gray-200 dark:border-gray-800"
+                        className={`border-b border-gray-200 dark:border-gray-800 ${
+                          row.is_keystone
+                            ? 'bg-amber-50/60 dark:bg-amber-900/10 border-l-4 border-l-amber-500'
+                            : ''
+                        }`}
                       >
                         <td className="py-2 pr-2 font-mono text-gray-800 dark:text-gray-200">
+                          {row.is_keystone && (
+                            <span
+                              title={
+                                row.regime_signature
+                                  ? `Keystone regime: ${row.regime_signature}\n${row.regime_run_count} validatable run dates in this regime`
+                                  : 'Keystone regime'
+                              }
+                              className="inline-flex items-center justify-center w-4 h-4 mr-1.5 rounded-sm bg-amber-500 text-white text-[10px] font-bold align-middle cursor-help"
+                            >
+                              K
+                            </span>
+                          )}
                           {row.run_date}
                         </td>
                         <td className="py-2 px-2 text-right text-gray-800 dark:text-gray-200">
@@ -461,7 +490,7 @@ const ModelPerformance: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto px-3 py-6">
+    <div className="-mx-8 md:-mx-12 xl:-mx-16 px-2 py-6">
       <Helmet>
         <title>Model Performance | MPM</title>
       </Helmet>

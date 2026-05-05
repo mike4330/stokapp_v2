@@ -355,19 +355,26 @@ def get_mpt_results_gamma_scatter(days: int = 365, db: Session = Depends(get_db)
 @router.get("/mpt-results/validation")
 def get_mpt_validation(
     horizon_days: int = 365,
-    n_periods: int = 6,
+    n_periods: int = 8,
+    n_keystones: int = 3,
+    keystone_min_dates: int = 15,
     db: Session = Depends(get_db),
 ):
     """Predicted vs realized return for past MPT runs.
 
-    For each of `n_periods` evenly-spaced historical run dates that have
-    `horizon_days` of forward data available, compute two realized-return
-    flavors against the model's predicted return:
+    Selection is hybrid:
+    - Up to `n_keystones` "keystone" rows are anchored to structural regimes
+      (distinct upper_bound/lower_bound/max_volatility tuples) that contain
+      at least `keystone_min_dates` validatable run dates. The representative
+      date for each is the median validatable date within that regime.
+    - The remaining slots (up to `n_periods` total) are time-evenly-spaced
+      fills drawn from the candidate-date pool minus the keystones.
 
+    Two realized flavors per row:
     - held_through_pct: only symbols still in `weights` at t1 (renormalized).
                         Cleanest read on model quality.
     - as_traded_pct:    every symbol in t0 weights. Sold symbols exit at last
-                        observed price (the day they dropped from `weights`).
+                        observed price.
 
     The gap between the two reflects the relative performance of the sold
     cohort vs the held cohort, not pure trading alpha — sale proceeds aren't
@@ -393,13 +400,71 @@ def get_mpt_validation(
         if not candidate_dates:
             return {"horizon_days": horizon_days, "rows": []}
 
-        if len(candidate_dates) <= n_periods:
-            selected = candidate_dates
+        # Identify keystone regimes: structural (upper/lower/max_vol) groups
+        # with at least keystone_min_dates eligible candidate dates. Take the
+        # median candidate date per regime as that regime's representative.
+        ph = ",".join(f":d{i}" for i in range(len(candidate_dates)))
+        ph_params = {f"d{i}": candidate_dates[i] for i in range(len(candidate_dates))}
+
+        keystone_rows = db.execute(text(f"""
+            WITH eligible AS (
+              SELECT DISTINCT date(timestamp) AS d,
+                     upper_bound, lower_bound, max_volatility
+              FROM mpt_results
+              WHERE date(timestamp) IN ({ph})
+            ),
+            ranked AS (
+              SELECT upper_bound, lower_bound, max_volatility, d,
+                     COUNT(*) OVER (
+                       PARTITION BY upper_bound, lower_bound, max_volatility
+                     ) AS cnt,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY upper_bound, lower_bound, max_volatility
+                       ORDER BY d
+                     ) AS rn
+              FROM eligible
+            )
+            SELECT upper_bound, lower_bound, max_volatility, cnt, d
+            FROM ranked
+            WHERE rn = (cnt + 1) / 2 AND cnt >= :min_runs
+            ORDER BY cnt DESC, d
+            LIMIT :n_keystones
+        """), {**ph_params, "min_runs": keystone_min_dates,
+               "n_keystones": n_keystones}).fetchall()
+
+        # Map keystone date -> regime metadata
+        keystone_meta = {
+            r[4]: {
+                "is_keystone": True,
+                "regime_run_count": int(r[3]),
+                "regime_signature": (
+                    f"u={r[0]:.4f} / l={r[1]:.4f} / vol={r[2]:.4f}"
+                ),
+            }
+            for r in keystone_rows
+        }
+        keystone_dates = set(keystone_meta.keys())
+
+        # Fill remaining slots with time-evenly-spaced dates from the
+        # non-keystone pool. If nothing left, just use the keystones.
+        fill_count = max(0, n_periods - len(keystone_dates))
+        non_keystone = [d for d in candidate_dates if d not in keystone_dates]
+
+        if fill_count == 0 or not non_keystone:
+            fill_dates: list[str] = []
+        elif len(non_keystone) <= fill_count:
+            fill_dates = list(non_keystone)
         else:
-            step = (len(candidate_dates) - 1) / (n_periods - 1)
-            selected = [candidate_dates[round(i * step)] for i in range(n_periods)]
-            seen = set()
-            selected = [d for d in selected if not (d in seen or seen.add(d))]
+            step = (len(non_keystone) - 1) / max(1, fill_count - 1) if fill_count > 1 else 0
+            picks = (
+                [non_keystone[round(i * step)] for i in range(fill_count)]
+                if fill_count > 1
+                else [non_keystone[len(non_keystone) // 2]]
+            )
+            seen: set = set()
+            fill_dates = [d for d in picks if not (d in seen or seen.add(d))]
+
+        selected = sorted(set(list(keystone_dates) + fill_dates))
 
         rows = []
         for t0 in selected:
@@ -466,12 +531,19 @@ def get_mpt_validation(
             delta = round(traded - held, 2) if held is not None and traded is not None else None
             predicted = round(pred[0], 2) if pred and pred[0] is not None else None
 
+            meta = keystone_meta.get(t0, {
+                "is_keystone": False,
+                "regime_run_count": None,
+                "regime_signature": None,
+            })
+
             rows.append({
                 "run_date": t0,
                 "forward_date": t1,
                 "predicted_pct": predicted,
                 "held_through_pct": held,
                 "as_traded_pct": traded,
+                **meta,
                 "trading_delta": delta,
                 "n_held": int(agg[0] or 0) if agg else 0,
                 "n_sold": int(agg[1] or 0) if agg else 0,
